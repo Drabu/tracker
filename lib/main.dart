@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum HabitState {
   none,
@@ -178,6 +180,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         _timeData[habit]![_currentWeekKey]![dayIndex] = selectedTime;
                       });
                       _animateProgressUpdate();
+                      _saveData(); // Save data after changes
                     }
                   } else {
                     setState(() {
@@ -191,6 +194,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                       }
                     });
                     _animateProgressUpdate();
+                    _saveData(); // Save data after changes
                   }
                   if (mounted) Navigator.of(context).pop();
                 },
@@ -426,9 +430,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       curve: Curves.easeInOutQuart,
     ));
     
-    // Start animations
-    _progressAnimationController.forward();
-    _ringAnimationController.forward();
+    // Load saved data and start animations
+    _loadData().then((_) {
+      if (mounted) {
+        setState(() {});
+        _progressAnimationController.forward();
+        _ringAnimationController.forward();
+      }
+    });
   }
 
   @override
@@ -443,6 +452,107 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _ringAnimationController.reset();
     _progressAnimationController.forward();
     _ringAnimationController.forward();
+  }
+
+  // Data persistence methods
+  Future<void> _saveData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Convert tracking data to JSON-serializable format
+      Map<String, dynamic> trackingDataJson = {};
+      _trackingData.forEach((habit, weeks) {
+        trackingDataJson[habit] = {};
+        weeks.forEach((weekKey, days) {
+          trackingDataJson[habit][weekKey] = {};
+          days.forEach((dayIndex, state) {
+            trackingDataJson[habit][weekKey][dayIndex.toString()] = state.index;
+          });
+        });
+      });
+      
+      // Convert time data to JSON-serializable format
+      Map<String, dynamic> timeDataJson = {};
+      _timeData.forEach((habit, weeks) {
+        timeDataJson[habit] = {};
+        weeks.forEach((weekKey, days) {
+          timeDataJson[habit][weekKey] = {};
+          days.forEach((dayIndex, time) {
+            if (time != null) {
+              timeDataJson[habit][weekKey][dayIndex.toString()] = {
+                'hour': time.hour,
+                'minute': time.minute,
+              };
+            }
+          });
+        });
+      });
+      
+      // Save to SharedPreferences
+      await prefs.setString('trackingData', jsonEncode(trackingDataJson));
+      await prefs.setString('timeData', jsonEncode(timeDataJson));
+      await prefs.setString('currentWeekStart', _currentWeekStart.toIso8601String());
+      
+    } catch (e) {
+      print('Error saving data: $e');
+    }
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Load tracking data
+      final trackingDataString = prefs.getString('trackingData');
+      if (trackingDataString != null) {
+        final Map<String, dynamic> trackingDataJson = jsonDecode(trackingDataString);
+        _trackingData.clear();
+        
+        trackingDataJson.forEach((habit, weeks) {
+          _trackingData[habit] = {};
+          (weeks as Map<String, dynamic>).forEach((weekKey, days) {
+            _trackingData[habit]![weekKey] = {};
+            (days as Map<String, dynamic>).forEach((dayIndexStr, stateIndex) {
+              final dayIndex = int.parse(dayIndexStr);
+              final state = HabitState.values[stateIndex as int];
+              _trackingData[habit]![weekKey]![dayIndex] = state;
+            });
+          });
+        });
+      }
+      
+      // Load time data
+      final timeDataString = prefs.getString('timeData');
+      if (timeDataString != null) {
+        final Map<String, dynamic> timeDataJson = jsonDecode(timeDataString);
+        _timeData.clear();
+        
+        timeDataJson.forEach((habit, weeks) {
+          _timeData[habit] = {};
+          (weeks as Map<String, dynamic>).forEach((weekKey, days) {
+            _timeData[habit]![weekKey] = {};
+            (days as Map<String, dynamic>).forEach((dayIndexStr, timeJson) {
+              final dayIndex = int.parse(dayIndexStr);
+              final timeMap = timeJson as Map<String, dynamic>;
+              final time = TimeOfDay(
+                hour: timeMap['hour'] as int,
+                minute: timeMap['minute'] as int,
+              );
+              _timeData[habit]![weekKey]![dayIndex] = time;
+            });
+          });
+        });
+      }
+      
+      // Load current week start
+      final weekStartString = prefs.getString('currentWeekStart');
+      if (weekStartString != null) {
+        _currentWeekStart = DateTime.parse(weekStartString);
+      }
+      
+    } catch (e) {
+      print('Error loading data: $e');
+    }
   }
 
   bool _shouldShowContributionGraph() {
@@ -464,18 +574,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     setState(() {
       _currentWeekStart = _currentWeekStart.subtract(const Duration(days: 7));
     });
+    _saveData(); // Save current week
   }
 
   void _goToNextWeek() {
     setState(() {
       _currentWeekStart = _currentWeekStart.add(const Duration(days: 7));
     });
+    _saveData(); // Save current week
   }
 
   void _goToCurrentWeek() {
     setState(() {
       _currentWeekStart = _getWeekStart(DateTime.now());
     });
+    _saveData(); // Save current week
   }
 
   PreferredSizeWidget _buildAppBar() {

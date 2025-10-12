@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
 enum HabitState {
   none,
@@ -6,7 +7,8 @@ enum HabitState {
   delayed,
   partial,
   completed,
-  missed
+  missed,
+  avoided
 }
 
 void main() {
@@ -48,12 +50,17 @@ class DailyTrackerHome extends StatefulWidget {
   State<DailyTrackerHome> createState() => _DailyTrackerHomeState();
 }
 
-class _DailyTrackerHomeState extends State<DailyTrackerHome> {
+class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProviderStateMixin {
   ViewType _currentView = ViewType.day;
   final DateTime _selectedDate = DateTime.now();
   DateTime _currentWeekStart = DateTime.now();
   final Map<String, Map<String, Map<int, HabitState>>> _trackingData = {}; // habit -> weekKey -> dayIndex -> state
   final Map<String, Map<String, Map<int, TimeOfDay?>>> _timeData = {}; // habit -> weekKey -> dayIndex -> time
+  
+  late AnimationController _progressAnimationController;
+  late AnimationController _ringAnimationController;
+  late Animation<double> _progressAnimation;
+  late Animation<double> _ringAnimation;
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -66,7 +73,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
       'Mid Day Shower',
       'Gym',
       'Walk',
-      'Guitar',
       'Typing',
       'Water',
       'Book',
@@ -123,7 +129,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
     'Guitar': {HabitState.completed: 10, HabitState.partial: 5, HabitState.missed: 0},
     'Breakfast': {HabitState.completed: 5, HabitState.missed: 0},
     'Lunch': {HabitState.completed: 5, HabitState.missed: 0},
-    'Mid Day Shower': {HabitState.completed: 5, HabitState.missed: 0},
+    'Mid Day Shower': {HabitState.completed: 10, HabitState.missed: 0},
     'Water': {HabitState.completed: 5, HabitState.partial: 3, HabitState.missed: 0},
     'Eggs': {HabitState.completed: 3, HabitState.missed: 0},
     'Meal': {HabitState.completed: 3, HabitState.missed: 0},
@@ -134,7 +140,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
     'Bed Time (B.T.)': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
     'Asleep Time (A.S.T.)': {HabitState.completed: 5, HabitState.missed: 0},
     'Wake Time (W.T.)': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
-    'Midday Sleep': {HabitState.completed: 3, HabitState.missed: 0},
+    'Midday Sleep': {HabitState.avoided: 5, HabitState.completed: 0, HabitState.missed: 0},
   };
 
   void _showHabitStateDialog(String habit, int dayIndex) {
@@ -171,6 +177,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
                         _timeData[habit]![_currentWeekKey] ??= {};
                         _timeData[habit]![_currentWeekKey]![dayIndex] = selectedTime;
                       });
+                      _animateProgressUpdate();
                     }
                   } else {
                     setState(() {
@@ -183,6 +190,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
                         _timeData[habit]![_currentWeekKey]![dayIndex] = null;
                       }
                     });
+                    _animateProgressUpdate();
                   }
                   if (mounted) Navigator.of(context).pop();
                 },
@@ -195,11 +203,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
   }
 
   List<HabitState> _getAvailableStates(String habit) {
-    if (_prayerHabits.contains(habit)) {
+    if (habit == 'Midday Sleep') {
+      return [HabitState.none, HabitState.avoided, HabitState.completed, HabitState.missed];
+    } else if (_prayerHabits.contains(habit)) {
       return [HabitState.none, HabitState.onTime, HabitState.delayed, HabitState.missed];
     } else if (_timeBasedHabits.contains(habit)) {
       return [HabitState.none, HabitState.onTime, HabitState.delayed, HabitState.missed];
-    } else if (['Quran', 'Book', 'Gym', 'Walk', 'Typing', 'Guitar', 'Water'].contains(habit)) {
+    } else if (['Quran', 'Book', 'Gym', 'Walk', 'Typing', 'Water'].contains(habit)) {
       return [HabitState.none, HabitState.completed, HabitState.partial, HabitState.missed];
     } else {
       return [HabitState.none, HabitState.completed, HabitState.missed];
@@ -220,6 +230,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
         return 'Completed';
       case HabitState.missed:
         return 'Missed';
+      case HabitState.avoided:
+        return 'Avoided (Good!)';
     }
   }
 
@@ -317,6 +329,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
         return Colors.grey.shade200;
       case HabitState.onTime:
       case HabitState.completed:
+      case HabitState.avoided:
         return Colors.green.shade600;
       case HabitState.delayed:
       case HabitState.partial:
@@ -340,6 +353,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
         return const Icon(Icons.circle_outlined, color: Colors.white, size: 16);
       case HabitState.missed:
         return const Icon(Icons.close, color: Colors.white, size: 16);
+      case HabitState.avoided:
+        return const Icon(Icons.block, color: Colors.white, size: 16);
     }
   }
 
@@ -384,6 +399,50 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
   void initState() {
     super.initState();
     _currentWeekStart = _getWeekStart(DateTime.now());
+    
+    _progressAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _ringAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+    
+    _progressAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _progressAnimationController,
+      curve: Curves.easeInOutCubic,
+    ));
+    
+    _ringAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _ringAnimationController,
+      curve: Curves.easeInOutQuart,
+    ));
+    
+    // Start animations
+    _progressAnimationController.forward();
+    _ringAnimationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _progressAnimationController.dispose();
+    _ringAnimationController.dispose();
+    super.dispose();
+  }
+
+  void _animateProgressUpdate() {
+    _progressAnimationController.reset();
+    _ringAnimationController.reset();
+    _progressAnimationController.forward();
+    _ringAnimationController.forward();
   }
 
   bool _shouldShowContributionGraph() {
@@ -816,9 +875,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildDailyScoreCard(currentScore, maxScore, percentage),
+        _buildAppleStyleActivityRings(todayIndex),
+        const SizedBox(height: 32),
+        _buildAppleStyleDailyProgress(currentScore, maxScore, percentage),
         const SizedBox(height: 24),
-        ..._buildDailyHabitSections(todayIndex),
+        ..._buildAppleStyleHabitSections(todayIndex),
       ],
     );
   }
@@ -1554,4 +1615,553 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> {
       ],
     );
   }
+
+  // Apple-style Activity Rings Widget
+  Widget _buildAppleStyleActivityRings(int dayIndex) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF161B22).withValues(alpha: 0.95),
+            const Color(0xFF0D1117).withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Today\'s Activity',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            height: 200,
+            width: 200,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 85,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Akhira (Salah)', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFFFF453A), // Red ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 65,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Daily Habits', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF30D158), // Green ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 45,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Sleep Metrics', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF007AFF), // Blue ring
+                  ),
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${_getDailyScore(dayIndex)}',
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    Text(
+                      'POINTS',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.7),
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildRingLegend(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityRing({
+    required double radius,
+    required double strokeWidth,
+    required double progress,
+    required Color color,
+  }) {
+    return CustomPaint(
+      size: Size(radius * 2, radius * 2),
+      painter: ActivityRingPainter(
+        progress: progress,
+        color: color,
+        strokeWidth: strokeWidth,
+      ),
+    );
+  }
+
+  Widget _buildRingLegend() {
+    return Column(
+      children: [
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) => _buildLegendItem(
+            color: const Color(0xFFFF453A),
+            title: 'Prayers',
+            subtitle: '${(_getCategoryProgress('Akhira (Salah)', _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday) * _ringAnimation.value * 100).toInt()}% complete',
+          ),
+        ),
+        const SizedBox(height: 8),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) => _buildLegendItem(
+            color: const Color(0xFF30D158),
+            title: 'Daily Habits',
+            subtitle: '${(_getCategoryProgress('Daily Habits', _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday) * _ringAnimation.value * 100).toInt()}% complete',
+          ),
+        ),
+        const SizedBox(height: 8),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) => _buildLegendItem(
+            color: const Color(0xFF007AFF),
+            title: 'Sleep',
+            subtitle: '${(_getCategoryProgress('Sleep Metrics', _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday) * _ringAnimation.value * 100).toInt()}% complete',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem({
+    required Color color,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  double _getCategoryProgress(String categoryName, int dayIndex) {
+    List<String> habits = _categories[categoryName] ?? [];
+    int currentScore = 0;
+    int maxScore = 0;
+    
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    
+    for (String habit in habits) {
+      bool isPrayer = _prayerHabits.contains(habit);
+      bool isDisabled = !isPrayer && isWeekend;
+      
+      if (!isDisabled) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state != HabitState.none) {
+          currentScore += _habitStatePoints[habit]?[state] ?? 0;
+        }
+        maxScore += _getMaxHabitPoints(habit);
+      }
+    }
+    
+    return maxScore > 0 ? currentScore / maxScore : 0.0;
+  }
+
+  Widget _buildAppleStyleDailyProgress(int current, int max, double percentage) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF161B22).withValues(alpha: 0.95),
+            const Color(0xFF0D1117).withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Daily Progress',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.9),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF30D158).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF30D158).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  '${(percentage * 100).toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF30D158),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '$current / $max points',
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: -1,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            child: AnimatedBuilder(
+              animation: _progressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: percentage * _progressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF30D158), Color(0xFF32D74B)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildAppleStyleHabitSections(int dayIndex) {
+    List<Widget> sections = [];
+    
+    for (var entry in _categories.entries) {
+      sections.add(_buildAppleStyleHabitSection(entry.key, entry.value, dayIndex));
+      sections.add(const SizedBox(height: 20));
+    }
+    
+    return sections;
+  }
+
+  Widget _buildAppleStyleHabitSection(String categoryName, List<String> habits, int dayIndex) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF161B22).withValues(alpha: 0.95),
+            const Color(0xFF0D1117).withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text(
+              categoryName,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ),
+          ...habits.map((habit) => _buildAppleStyleHabitItem(habit, dayIndex)),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppleStyleHabitItem(String habit, int dayIndex) {
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    bool isPrayer = _prayerHabits.contains(habit);
+    bool isDisabled = !isPrayer && isWeekend;
+    bool isSleepTracking = _sleepTrackingHabits.contains(habit);
+    
+    HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    int points = _habitStatePoints[habit]?[state] ?? 0;
+    int maxPoints = _getMaxHabitPoints(habit);
+    TimeOfDay? time = _timeData[habit]?[_currentWeekKey]?[dayIndex];
+    
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 0.5,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: GestureDetector(
+          onTap: isDisabled ? null : () => _showHabitStateDialog(habit, dayIndex),
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isDisabled ? Colors.white.withValues(alpha: 0.1) : _getAppleStateColor(state),
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: state != HabitState.none && !isDisabled ? [
+                BoxShadow(
+                  color: _getAppleStateColor(state).withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ] : null,
+            ),
+            child: isDisabled 
+                ? Icon(Icons.remove, color: Colors.white.withValues(alpha: 0.3), size: 18)
+                : _getAppleStateIcon(state),
+          ),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              habit,
+              style: TextStyle(
+                color: isDisabled ? Colors.white.withValues(alpha: 0.4) : Colors.white,
+                fontWeight: FontWeight.w500,
+                fontSize: 16,
+              ),
+            ),
+            if (isSleepTracking && time != null)
+              Text(
+                time.format(context),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 14,
+                ),
+              ),
+          ],
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: state != HabitState.none 
+                ? const Color(0xFF30D158).withValues(alpha: 0.2)
+                : Colors.white.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: state != HabitState.none 
+                  ? const Color(0xFF30D158).withValues(alpha: 0.3)
+                  : Colors.white.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Text(
+            state != HabitState.none ? '+$points' : '$maxPoints',
+            style: TextStyle(
+              color: state != HabitState.none 
+                  ? const Color(0xFF30D158)
+                  : Colors.white.withValues(alpha: 0.6),
+              fontWeight: FontWeight.w600,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getAppleStateColor(HabitState state) {
+    switch (state) {
+      case HabitState.none:
+        return Colors.white.withValues(alpha: 0.15);
+      case HabitState.onTime:
+      case HabitState.completed:
+      case HabitState.avoided:
+        return const Color(0xFF30D158);
+      case HabitState.delayed:
+      case HabitState.partial:
+        return const Color(0xFFFF9F0A);
+      case HabitState.missed:
+        return const Color(0xFFFF453A);
+    }
+  }
+
+  Widget _getAppleStateIcon(HabitState state) {
+    switch (state) {
+      case HabitState.none:
+        return const SizedBox.shrink();
+      case HabitState.onTime:
+        return const Icon(Icons.schedule, color: Colors.white, size: 18);
+      case HabitState.completed:
+        return const Icon(Icons.check_circle, color: Colors.white, size: 18);
+      case HabitState.delayed:
+        return const Icon(Icons.access_time, color: Colors.white, size: 18);
+      case HabitState.partial:
+        return const Icon(Icons.circle_outlined, color: Colors.white, size: 18);
+      case HabitState.missed:
+        return const Icon(Icons.cancel, color: Colors.white, size: 18);
+      case HabitState.avoided:
+        return const Icon(Icons.block, color: Colors.white, size: 18);
+    }
+  }
+}
+
+// Custom Painter for Activity Rings
+class ActivityRingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final double strokeWidth;
+
+  ActivityRingPainter({
+    required this.progress,
+    required this.color,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - strokeWidth / 2;
+
+    // Background ring
+    final backgroundPaint = Paint()
+      ..color = color.withValues(alpha: 0.2)
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, backgroundPaint);
+
+    // Progress ring
+    final progressPaint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const startAngle = -math.pi / 2; // Start at top
+    final sweepAngle = 2 * math.pi * progress;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      progressPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

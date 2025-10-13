@@ -1797,6 +1797,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     final categories = [
       {'name': 'Akhira (Salah)', 'color': const Color(0xFFFF453A), 'title': 'Prayers'},
       {'name': 'Daily Habits', 'color': const Color(0xFF30D158), 'title': 'Habits'},
+      {'name': 'Guitar Sessions', 'color': const Color(0xFFFF9F0A), 'title': 'Guitar'},
+      {'name': 'Water', 'color': const Color(0xFF00C7BE), 'title': 'Water'},
       {'name': 'Sleep Metrics', 'color': const Color(0xFF007AFF), 'title': 'Sleep'},
     ];
 
@@ -1837,21 +1839,32 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 20),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: categories.map((category) {
-              double progress = _getCategoryProgress(category['name'] as String, dayIndex);
-              Color color = category['color'] as Color;
-              String title = category['title'] as String;
-              
-              return _buildIndividualRing(
-                progress: progress,
-                color: color,
-                title: title,
-                categoryName: category['name'] as String,
-                dayIndex: dayIndex,
-              );
-            }).toList(),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: categories.asMap().entries.map((entry) {
+                int index = entry.key;
+                Map<String, dynamic> category = entry.value;
+                double progress = _getCategoryProgress(category['name'] as String, dayIndex);
+                Color color = category['color'] as Color;
+                String title = category['title'] as String;
+                
+                return Container(
+                  width: 100,
+                  margin: EdgeInsets.only(
+                    left: index == 0 ? 0 : 8,
+                    right: index == categories.length - 1 ? 0 : 8,
+                  ),
+                  child: _buildIndividualRing(
+                    progress: progress,
+                    color: color,
+                    title: title,
+                    categoryName: category['name'] as String,
+                    dayIndex: dayIndex,
+                  ),
+                );
+              }).toList(),
+            ),
           ),
         ],
       ),
@@ -1868,66 +1881,72 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     int currentScore = _getCategoryScore(categoryName, dayIndex);
     int maxScore = _getCategoryMaxScore(categoryName, dayIndex);
     
-    return Expanded(
-      child: Column(
-        children: [
-          SizedBox(
-            width: 80,
-            height: 80,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => CustomPaint(
-                    size: const Size(80, 80),
-                    painter: ActivityRingPainter(
-                      progress: progress * _ringAnimation.value,
-                      color: color,
-                      strokeWidth: 8,
-                    ),
+    return Column(
+      children: [
+        SizedBox(
+          width: 80,
+          height: 80,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              AnimatedBuilder(
+                animation: _ringAnimation,
+                builder: (context, child) => CustomPaint(
+                  size: const Size(80, 80),
+                  painter: ActivityRingPainter(
+                    progress: progress * _ringAnimation.value,
+                    color: color,
+                    strokeWidth: 8,
                   ),
                 ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '${(progress * 100).toInt()}%',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+              ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '${(progress * 100).toInt()}%',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
-                    Text(
-                      '$currentScore/$maxScore',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
+                  ),
+                  Text(
+                    '$currentScore/$maxScore',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.7),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
           ),
-        ],
-      ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
   int _getCategoryScore(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habits;
+    
+    // Handle special Water category
+    if (categoryName == 'Water') {
+      habits = ['Water'];
+    } else {
+      habits = _categories[categoryName] ?? [];
+    }
+    
     int currentScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
@@ -1946,7 +1965,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryMaxScore(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habits;
+    
+    // Handle special Water category
+    if (categoryName == 'Water') {
+      habits = ['Water'];
+    } else {
+      habits = _categories[categoryName] ?? [];
+    }
+    
     int maxScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
@@ -2169,7 +2196,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   double _getCategoryProgress(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habits;
+    
+    // Handle special Water category
+    if (categoryName == 'Water') {
+      habits = ['Water'];
+    } else {
+      habits = _categories[categoryName] ?? [];
+    }
+    
     int currentScore = 0;
     int maxScore = 0;
     

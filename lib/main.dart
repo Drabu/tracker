@@ -967,7 +967,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   double _getDateIntensity(DateTime date) {
     // For now, simulate data - in a real app this would pull from your data store
-    int dayIndex = date.weekday == 7 ? 0 : date.weekday;
+    int dayIndex = date.weekday == 7 ? 6 : date.weekday - 1; // Convert to 0-6 system (Mon=0, Sun=6)
     int currentScore = _getDailyScore(dayIndex); // Using current week's data as simulation
     int maxScore = _getMaxDailyScoreForDay(dayIndex);
     
@@ -1041,7 +1041,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildDayView() {
     DateTime now = DateTime.now();
-    int todayIndex = now.weekday == 7 ? 0 : now.weekday; // Convert to our 0-6 system
+    int todayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to our 0-6 system (Mon=0, Sun=6)
     int currentScore = _getDailyScore(todayIndex);
     int maxScore = _getMaxDailyScoreForDay(todayIndex);
     double percentage = maxScore > 0 ? currentScore / maxScore : 0.0;
@@ -1917,7 +1917,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           animation: _ringAnimation,
           builder: (context, child) {
             DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 0 : now.weekday;
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
               color: const Color(0xFFFF453A),
               title: 'Prayers',
@@ -1930,7 +1930,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           animation: _ringAnimation,
           builder: (context, child) {
             DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 0 : now.weekday;
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
               color: const Color(0xFF30D158),
               title: 'Daily Habits',
@@ -1943,7 +1943,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           animation: _ringAnimation,
           builder: (context, child) {
             DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 0 : now.weekday;
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
               color: const Color(0xFF007AFF),
               title: 'Sleep',

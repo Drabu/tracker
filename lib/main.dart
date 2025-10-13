@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:convert';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 enum HabitState {
   none,
@@ -54,7 +56,7 @@ class DailyTrackerHome extends StatefulWidget {
 
 class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProviderStateMixin {
   ViewType _currentView = ViewType.day;
-  final DateTime _selectedDate = DateTime.now();
+  DateTime _selectedDate = DateTime.now();
   DateTime _currentWeekStart = DateTime.now();
   final Map<String, Map<String, Map<int, HabitState>>> _trackingData = {}; // habit -> weekKey -> dayIndex -> state
   final Map<String, Map<String, Map<int, TimeOfDay?>>> _timeData = {}; // habit -> weekKey -> dayIndex -> time
@@ -63,6 +65,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   late AnimationController _ringAnimationController;
   late Animation<double> _progressAnimation;
   late Animation<double> _ringAnimation;
+  
+  Timer? _dayUpdateTimer;
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -430,6 +434,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       curve: Curves.easeInOutQuart,
     ));
     
+    // Enable wake lock to keep screen on
+    _enableWakeLock();
+    
+    // Set up timer to update current day at midnight
+    _setupDayUpdateTimer();
+    
     // Load saved data and start animations
     _loadData().then((_) {
       if (mounted) {
@@ -442,8 +452,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   @override
   void dispose() {
+    _dayUpdateTimer?.cancel();
     _progressAnimationController.dispose();
     _ringAnimationController.dispose();
+    _disableWakeLock();
     super.dispose();
   }
 
@@ -452,6 +464,54 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _ringAnimationController.reset();
     _progressAnimationController.forward();
     _ringAnimationController.forward();
+  }
+
+  Future<void> _enableWakeLock() async {
+    try {
+      await WakelockPlus.enable();
+      print('Wake lock enabled - screen will stay on');
+    } catch (e) {
+      print('Failed to enable wake lock: $e');
+    }
+  }
+
+  Future<void> _disableWakeLock() async {
+    try {
+      await WakelockPlus.disable();
+      print('Wake lock disabled');
+    } catch (e) {
+      print('Failed to disable wake lock: $e');
+    }
+  }
+
+  void _setupDayUpdateTimer() {
+    // Calculate time until next midnight
+    final now = DateTime.now();
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    final timeUntilMidnight = nextMidnight.difference(now);
+
+    // Set up initial timer to trigger at midnight
+    _dayUpdateTimer = Timer(timeUntilMidnight, () {
+      _updateCurrentDay();
+      // Set up recurring timer for every 24 hours
+      _dayUpdateTimer = Timer.periodic(const Duration(days: 1), (_) {
+        _updateCurrentDay();
+      });
+    });
+  }
+
+  void _updateCurrentDay() {
+    if (mounted) {
+      setState(() {
+        _selectedDate = DateTime.now();
+        // Update current week if we've moved to a new week
+        DateTime newWeekStart = _getWeekStart(DateTime.now());
+        if (!newWeekStart.isAtSameMomentAs(_currentWeekStart)) {
+          _currentWeekStart = newWeekStart;
+        }
+      });
+      _saveData();
+    }
   }
 
   // Data persistence methods
@@ -630,7 +690,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   String _getViewTitle() {
     switch (_currentView) {
       case ViewType.day:
-        return 'Today • ${_formatDate(_selectedDate)}';
+        return 'Today • ${_formatDate(DateTime.now())}';
       case ViewType.week:
         DateTime weekEnd = _currentWeekStart.add(const Duration(days: 6));
         bool isCurrentWeek = _isCurrentWeek();
@@ -980,7 +1040,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildDayView() {
-    int todayIndex = _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday; // Convert to our 0-6 system
+    DateTime now = DateTime.now();
+    int todayIndex = now.weekday == 7 ? 0 : now.weekday; // Convert to our 0-6 system
     int currentScore = _getDailyScore(todayIndex);
     int maxScore = _getMaxDailyScoreForDay(todayIndex);
     double percentage = maxScore > 0 ? currentScore / maxScore : 0.0;
@@ -1854,29 +1915,41 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       children: [
         AnimatedBuilder(
           animation: _ringAnimation,
-          builder: (context, child) => _buildLegendItem(
-            color: const Color(0xFFFF453A),
-            title: 'Prayers',
-            subtitle: '${(_getCategoryProgress('Akhira (Salah)', _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday) * _ringAnimation.value * 100).toInt()}% complete',
-          ),
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 0 : now.weekday;
+            return _buildLegendItem(
+              color: const Color(0xFFFF453A),
+              title: 'Prayers',
+              subtitle: '${(_getCategoryProgress('Akhira (Salah)', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
         ),
         const SizedBox(height: 8),
         AnimatedBuilder(
           animation: _ringAnimation,
-          builder: (context, child) => _buildLegendItem(
-            color: const Color(0xFF30D158),
-            title: 'Daily Habits',
-            subtitle: '${(_getCategoryProgress('Daily Habits', _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday) * _ringAnimation.value * 100).toInt()}% complete',
-          ),
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 0 : now.weekday;
+            return _buildLegendItem(
+              color: const Color(0xFF30D158),
+              title: 'Daily Habits',
+              subtitle: '${(_getCategoryProgress('Daily Habits', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
         ),
         const SizedBox(height: 8),
         AnimatedBuilder(
           animation: _ringAnimation,
-          builder: (context, child) => _buildLegendItem(
-            color: const Color(0xFF007AFF),
-            title: 'Sleep',
-            subtitle: '${(_getCategoryProgress('Sleep Metrics', _selectedDate.weekday == 7 ? 0 : _selectedDate.weekday) * _ringAnimation.value * 100).toInt()}% complete',
-          ),
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 0 : now.weekday;
+            return _buildLegendItem(
+              color: const Color(0xFF007AFF),
+              title: 'Sleep',
+              subtitle: '${(_getCategoryProgress('Sleep Metrics', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
         ),
       ],
     );

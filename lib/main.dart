@@ -1049,6 +1049,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _buildIndividualCategoryRings(todayIndex),
+        const SizedBox(height: 24),
         _buildAppleStyleActivityRings(todayIndex),
         const SizedBox(height: 32),
         _buildAppleStyleDailyProgress(currentScore, maxScore, percentage),
@@ -1788,6 +1790,175 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         )),
       ],
     );
+  }
+
+  // Individual Category Rings Widget
+  Widget _buildIndividualCategoryRings(int dayIndex) {
+    final categories = [
+      {'name': 'Akhira (Salah)', 'color': const Color(0xFFFF453A), 'title': 'Prayers'},
+      {'name': 'Daily Habits', 'color': const Color(0xFF30D158), 'title': 'Habits'},
+      {'name': 'Sleep Metrics', 'color': const Color(0xFF007AFF), 'title': 'Sleep'},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF161B22).withValues(alpha: 0.95),
+            const Color(0xFF0D1117).withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Category Progress',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: categories.map((category) {
+              double progress = _getCategoryProgress(category['name'] as String, dayIndex);
+              Color color = category['color'] as Color;
+              String title = category['title'] as String;
+              
+              return _buildIndividualRing(
+                progress: progress,
+                color: color,
+                title: title,
+                categoryName: category['name'] as String,
+                dayIndex: dayIndex,
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIndividualRing({
+    required double progress,
+    required Color color,
+    required String title,
+    required String categoryName,
+    required int dayIndex,
+  }) {
+    int currentScore = _getCategoryScore(categoryName, dayIndex);
+    int maxScore = _getCategoryMaxScore(categoryName, dayIndex);
+    
+    return Expanded(
+      child: Column(
+        children: [
+          SizedBox(
+            width: 80,
+            height: 80,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => CustomPaint(
+                    size: const Size(80, 80),
+                    painter: ActivityRingPainter(
+                      progress: progress * _ringAnimation.value,
+                      color: color,
+                      strokeWidth: 8,
+                    ),
+                  ),
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${(progress * 100).toInt()}%',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      '$currentScore/$maxScore',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getCategoryScore(String categoryName, int dayIndex) {
+    List<String> habits = _categories[categoryName] ?? [];
+    int currentScore = 0;
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    
+    for (String habit in habits) {
+      bool isPrayer = _prayerHabits.contains(habit);
+      bool isDisabled = !isPrayer && isWeekend;
+      
+      if (!isDisabled) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state != HabitState.none) {
+          currentScore += _habitStatePoints[habit]?[state] ?? 0;
+        }
+      }
+    }
+    return currentScore;
+  }
+
+  int _getCategoryMaxScore(String categoryName, int dayIndex) {
+    List<String> habits = _categories[categoryName] ?? [];
+    int maxScore = 0;
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    
+    for (String habit in habits) {
+      bool isPrayer = _prayerHabits.contains(habit);
+      bool isDisabled = !isPrayer && isWeekend;
+      
+      if (!isDisabled) {
+        maxScore += _getMaxHabitPoints(habit);
+      }
+    }
+    return maxScore;
   }
 
   // Apple-style Activity Rings Widget

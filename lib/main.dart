@@ -74,6 +74,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   
   Timer? _dayUpdateTimer;
   Timer? _screenKeepAliveTimer;
+  
+  // Value notifiers for granular updates
+  final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<double> _compoundProgressNotifier = ValueNotifier<double>(0.0);
+  final ValueNotifier<Map<String, double>> _categoryProgressNotifier = ValueNotifier<Map<String, double>>({});
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -203,29 +208,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     );
                     
                     if (selectedTime != null && mounted) {
-                      setState(() {
-                        _trackingData[habit] ??= {};
-                        _trackingData[habit]![_currentWeekKey] ??= {};
-                        _trackingData[habit]![_currentWeekKey]![dayIndex] = state;
-                        _timeData[habit] ??= {};
-                        _timeData[habit]![_currentWeekKey] ??= {};
-                        _timeData[habit]![_currentWeekKey]![dayIndex] = selectedTime;
-                      });
-                      _animateSpecificProgress(habit);
+                      _updateHabitState(habit, dayIndex, state, selectedTime);
                       _saveData(); // Save data after changes
                     }
                   } else {
-                    setState(() {
-                      _trackingData[habit] ??= {};
-                      _trackingData[habit]![_currentWeekKey] ??= {};
-                      _trackingData[habit]![_currentWeekKey]![dayIndex] = state;
-                      if (state == HabitState.none || state == HabitState.missed) {
-                        _timeData[habit] ??= {};
-                        _timeData[habit]![_currentWeekKey] ??= {};
-                        _timeData[habit]![_currentWeekKey]![dayIndex] = null;
-                      }
-                    });
-                    _animateSpecificProgress(habit);
+                    _updateHabitState(habit, dayIndex, state, null);
                     _saveData(); // Save data after changes
                   }
                   if (mounted) Navigator.of(context).pop();
@@ -498,6 +485,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     // Load saved data and start animations
     _loadData().then((_) {
       if (mounted) {
+        // Initialize notifiers with current values
+        int currentDayIndex = DateTime.now().weekday - 1;
+        _pointsNotifier.value = _getDailyScore(currentDayIndex);
+        _compoundProgressNotifier.value = _getCompoundProgress(currentDayIndex);
+        
+        Map<String, double> categoryProgress = {};
+        for (String categoryName in _categories.keys) {
+          categoryProgress[categoryName] = _getCategoryProgress(categoryName, currentDayIndex);
+        }
+        _categoryProgressNotifier.value = categoryProgress;
+        
         setState(() {});
         _progressAnimationController.forward();
         _ringAnimationController.forward();
@@ -515,6 +513,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _ringAnimationController.dispose();
     _compoundProgressAnimationController.dispose();
     _categoryProgressAnimationController.dispose();
+    _pointsNotifier.dispose();
+    _compoundProgressNotifier.dispose();
+    _categoryProgressNotifier.dispose();
     _disableWakeLock();
     super.dispose();
   }
@@ -524,6 +525,82 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _ringAnimationController.reset();
     _progressAnimationController.forward();
     _ringAnimationController.forward();
+  }
+
+  void _updateHabitState(String habit, int dayIndex, HabitState state, TimeOfDay? selectedTime) {
+    // Update habit data without setState
+    _trackingData[habit] ??= {};
+    _trackingData[habit]![_currentWeekKey] ??= {};
+    _trackingData[habit]![_currentWeekKey]![dayIndex] = state;
+    
+    // Handle time data
+    if (selectedTime != null) {
+      _timeData[habit] ??= {};
+      _timeData[habit]![_currentWeekKey] ??= {};
+      _timeData[habit]![_currentWeekKey]![dayIndex] = selectedTime;
+    } else if (state == HabitState.none || state == HabitState.missed) {
+      _timeData[habit] ??= {};
+      _timeData[habit]![_currentWeekKey] ??= {};
+      _timeData[habit]![_currentWeekKey]![dayIndex] = null;
+    }
+    
+    // Update specific progress values
+    _updateProgressNotifiers(habit);
+    _animateSpecificProgress(habit);
+  }
+
+  void _updateProgressNotifiers(String habit) {
+    // Update points notifier
+    int currentDayIndex = DateTime.now().weekday - 1;
+    _pointsNotifier.value = _getDailyScore(currentDayIndex);
+    
+    // Update compound progress if this habit is compounding
+    if (_compoundingHabits.contains(habit)) {
+      _compoundProgressNotifier.value = _getCompoundProgress(currentDayIndex);
+    }
+    
+    // Update category progress for all categories (since we don't know which category changed)
+    Map<String, double> categoryProgress = {};
+    for (String categoryName in _categories.keys) {
+      categoryProgress[categoryName] = _getCategoryProgress(categoryName, currentDayIndex);
+    }
+    _categoryProgressNotifier.value = categoryProgress;
+  }
+
+  double _getCompoundProgress(int dayIndex) {
+    List<String> compoundHabits = _compoundingHabits.toList();
+    int completedCount = 0;
+    int totalCount = 0;
+    
+    for (String habit in compoundHabits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        totalCount++;
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+          completedCount++;
+        }
+      }
+    }
+    
+    return totalCount > 0 ? completedCount / totalCount : 0.0;
+  }
+
+  double _getCategoryProgress(String categoryName, int dayIndex) {
+    List<String> habits = _categories[categoryName] ?? [];
+    int completed = 0;
+    int total = 0;
+    
+    for (String habit in habits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        total++;
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+          completed++;
+        }
+      }
+    }
+    
+    return total > 0 ? completed / total : 0.0;
   }
 
   void _animateSpecificProgress(String habitName) {
@@ -1453,7 +1530,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
-          _buildProgressScoreCard(currentScore),
+          _buildProgressScoreCard(),
           const SizedBox(height: 24),
           _buildCompoundHabitsProgressCard(dayIndex),
           const SizedBox(height: 24),
@@ -1464,21 +1541,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildCompoundHabitsProgressCard(int dayIndex) {
-    List<String> compoundHabits = _compoundingHabits.toList();
-    int completedCount = 0;
-    int totalCount = 0;
-    
-    for (String habit in compoundHabits) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
-        totalCount++;
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
-          completedCount++;
+    return ValueListenableBuilder<double>(
+      valueListenable: _compoundProgressNotifier,
+      builder: (context, progress, child) {
+        List<String> compoundHabits = _compoundingHabits.toList();
+        int completedCount = 0;
+        int totalCount = 0;
+        
+        for (String habit in compoundHabits) {
+          if (!_isHabitDisabled(habit, dayIndex)) {
+            totalCount++;
+            HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+              completedCount++;
+            }
+          }
         }
-      }
-    }
-    
-    double progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+        
+        progress = totalCount > 0 ? completedCount / totalCount : 0.0;
     
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1595,6 +1675,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         ],
       ),
     );
+      },
+    );
   }
 
   String _getCompoundHabitsNames(int dayIndex, int completedCount) {
@@ -1619,8 +1701,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
   }
 
-  Widget _buildProgressScoreCard(int currentScore) {
-    return Container(
+  Widget _buildProgressScoreCard() {
+    return ValueListenableBuilder<int>(
+      valueListenable: _pointsNotifier,
+      builder: (context, points, child) => Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFF2A2D3A),
@@ -1633,7 +1717,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: Column(
         children: [
           Text(
-            '$currentScore',
+            '$points',
             style: const TextStyle(
               fontSize: 48,
               fontWeight: FontWeight.bold,
@@ -1659,6 +1743,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -1707,11 +1792,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildCategoryProgressItem(String categoryName, Color categoryColor, int dayIndex) {
-    double progress = _getCategoryProgress(categoryName, dayIndex);
-    int completed = _getCategoryCompletedCount(categoryName, dayIndex);
-    int total = _getCategoryTotalCount(categoryName, dayIndex);
-    
-    return Container(
+    return ValueListenableBuilder<Map<String, double>>(
+      valueListenable: _categoryProgressNotifier,
+      builder: (context, categoryProgressMap, child) {
+        double progress = categoryProgressMap[categoryName] ?? _getCategoryProgress(categoryName, dayIndex);
+        int completed = _getCategoryCompletedCount(categoryName, dayIndex);
+        int total = _getCategoryTotalCount(categoryName, dayIndex);
+        
+        return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1758,6 +1846,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
         ],
       ),
+    );
+      },
     );
   }
 
@@ -2903,28 +2993,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  double _getCategoryProgress(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
-    
-    int currentScore = 0;
-    int maxScore = 0;
-    
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
-    
-    for (String habit in habits) {
-      bool isDisabled = _isHabitDisabled(habit, dayIndex);
-      
-      if (!isDisabled) {
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state != HabitState.none) {
-          currentScore += _habitStatePoints[habit]?[state] ?? 0;
-        }
-        maxScore += _getMaxHabitPoints(habit);
-      }
-    }
-    
-    return maxScore > 0 ? currentScore / maxScore : 0.0;
-  }
 
   Widget _buildAppleStyleDailyProgress(int current, int max, double percentage) {
     return Container(

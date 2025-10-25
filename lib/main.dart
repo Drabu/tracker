@@ -1334,21 +1334,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            flex: 3,
+            flex: 4,
             child: SingleChildScrollView(
               child: _buildTodaysFocusSection(todayIndex),
             ),
           ),
           const SizedBox(width: 24),
           Expanded(
-            flex: 2,
+            flex: 3,
             child: SingleChildScrollView(
               child: _buildYourProgressSection(todayIndex, currentScore),
             ),
           ),
           const SizedBox(width: 24),
           Expanded(
-            flex: 2,
+            flex: 3,
             child: SingleChildScrollView(
               child: _buildInsightsSection(todayIndex),
             ),

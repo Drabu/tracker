@@ -1202,12 +1202,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         children: [
           Expanded(
             flex: 3,
-            child: _buildTodaysFocusSection(todayIndex),
+            child: SingleChildScrollView(
+              child: _buildTodaysFocusSection(todayIndex),
+            ),
           ),
           const SizedBox(width: 24),
           Expanded(
             flex: 2,
-            child: _buildYourProgressSection(todayIndex, currentScore),
+            child: SingleChildScrollView(
+              child: _buildYourProgressSection(todayIndex, currentScore),
+            ),
           ),
         ],
       ),
@@ -1223,6 +1227,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     ];
 
     return Container(
+      padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1380,6 +1385,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildYourProgressSection(int dayIndex, int currentScore) {
     return Container(
+      padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

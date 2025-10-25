@@ -79,7 +79,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<double> _compoundProgressNotifier = ValueNotifier<double>(0.0);
   final ValueNotifier<Map<String, double>> _categoryProgressNotifier = ValueNotifier<Map<String, double>>({});
-  final ValueNotifier<int> _habitGridUpdateNotifier = ValueNotifier<int>(0);
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -517,7 +516,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _pointsNotifier.dispose();
     _compoundProgressNotifier.dispose();
     _categoryProgressNotifier.dispose();
-    _habitGridUpdateNotifier.dispose();
     _disableWakeLock();
     super.dispose();
   }
@@ -567,8 +565,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
     _categoryProgressNotifier.value = categoryProgress;
     
-    // Trigger habit grid update
-    _habitGridUpdateNotifier.value = _habitGridUpdateNotifier.value + 1;
+    // Trigger a setState for habit grids to update immediately  
+    setState(() {});
   }
 
   double _getCompoundProgress(int dayIndex) {
@@ -1972,10 +1970,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
-          ...habits.map((habit) => ValueListenableBuilder<int>(
-            valueListenable: _habitGridUpdateNotifier,
-            builder: (context, _, child) => _buildDailyHabitItem(habit, dayIndex),
-          )),
+          ...habits.map((habit) => _buildDailyHabitItem(habit, dayIndex)),
         ],
       ),
     );
@@ -2234,10 +2229,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
-          ValueListenableBuilder<int>(
-            valueListenable: _habitGridUpdateNotifier,
-            builder: (context, _, child) => _buildWeekHabitGrid(habits),
-          ),
+          _buildWeekHabitGrid(habits),
         ],
       ),
     );
@@ -2516,10 +2508,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
             const SizedBox(height: 16),
-            ValueListenableBuilder<int>(
-              valueListenable: _habitGridUpdateNotifier,
-              builder: (context, _, child) => _buildHabitGrid(habits),
-            ),
+            _buildHabitGrid(habits),
           ],
         ),
       ),
@@ -3154,10 +3143,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
-          ...habits.map((habit) => ValueListenableBuilder<int>(
-            valueListenable: _habitGridUpdateNotifier,
-            builder: (context, _, child) => _buildAppleStyleHabitItem(habit, dayIndex),
-          )),
+          ...habits.map((habit) => _buildAppleStyleHabitItem(habit, dayIndex)),
           const SizedBox(height: 8),
         ],
       ),

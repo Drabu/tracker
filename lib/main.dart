@@ -125,6 +125,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     'Bed Time (B.T.)', 'Asleep Time (A.S.T.)', 'Wake Time (W.T.)', 'Midday Sleep'
   };
 
+  final Set<String> _compoundingHabits = {
+    'Quran', 'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Evening Quran', // Deen
+    'Guitar', 'Book', // Personal  
+    'Typing', 'Data Structures', // Professional
+    'Gym', 'Water' // Health
+  };
+
 
   final Map<String, Map<HabitState, int>> _habitStatePoints = {
     'Fajr': {HabitState.onTime: 30, HabitState.delayed: 20, HabitState.missed: 0},
@@ -1173,6 +1180,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _buildAppleStyleActivityRings(todayIndex),
         const SizedBox(height: 32),
         _buildAppleStyleDailyProgress(currentScore, maxScore, percentage),
+        const SizedBox(height: 24),
+        _buildCompoundingHabitsChart(todayIndex),
         const SizedBox(height: 24),
         ..._buildAppleStyleHabitSections(todayIndex),
       ],
@@ -2604,6 +2613,223 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       case HabitState.avoided:
         return const Icon(Icons.block, color: Colors.white, size: 18);
     }
+  }
+  // Compounding Habits Chart Widget
+  Widget _buildCompoundingHabitsChart(int dayIndex) {
+    List<String> compoundingHabitsList = _compoundingHabits.toList();
+    int completedCount = 0;
+    int totalCount = 0;
+    
+    Map<String, double> categoryProgress = {};
+    Map<String, Color> categoryColors = {
+      'Deen': const Color(0xFFFF453A),
+      'Personal': const Color(0xFF30D158),
+      'Professional': const Color(0xFFFF9F0A),
+      'Health': const Color(0xFF00C7BE),
+    };
+    
+    // Calculate progress for each category
+    for (String category in ['Deen', 'Personal', 'Professional', 'Health']) {
+      List<String> categoryHabits = _categories[category] ?? [];
+      List<String> compoundingInCategory = categoryHabits.where((habit) => _compoundingHabits.contains(habit)).toList();
+      
+      if (compoundingInCategory.isNotEmpty) {
+        int categoryCompleted = 0;
+        int categoryTotal = compoundingInCategory.length;
+        
+        bool isWeekend = dayIndex == 5 || dayIndex == 6;
+        
+        for (String habit in compoundingInCategory) {
+          bool isPrayer = _prayerHabits.contains(habit);
+          bool isDisabled = !isPrayer && isWeekend;
+          
+          if (!isDisabled) {
+            totalCount++;
+            HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+              completedCount++;
+              categoryCompleted++;
+            }
+          }
+        }
+        
+        categoryProgress[category] = categoryTotal > 0 ? categoryCompleted / categoryTotal : 0.0;
+      }
+    }
+    
+    double overallProgress = totalCount > 0 ? completedCount / totalCount : 0.0;
+    
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF161B22).withValues(alpha: 0.95),
+            const Color(0xFF0D1117).withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Compounding Habits',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.9),
+                  letterSpacing: -0.5,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF9F0A).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFFF9F0A).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  '${(overallProgress * 100).toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFFF9F0A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Long-term growth habits that compound over time',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // Overall progress bar
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            child: AnimatedBuilder(
+              animation: _progressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: overallProgress * _progressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9F0A), Color(0xFFFF453A)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          Text(
+            '$completedCount of $totalCount habits completed',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 20),
+          
+          // Category breakdown
+          ...categoryProgress.entries.map((entry) {
+            String category = entry.key;
+            double progress = entry.value;
+            Color color = categoryColors[category] ?? Colors.grey;
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      category,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 3,
+                    child: Container(
+                      height: 6,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                      child: AnimatedBuilder(
+                        animation: _progressAnimation,
+                        builder: (context, child) => FractionallySizedBox(
+                          widthFactor: progress * _progressAnimation.value,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(3),
+                              color: color,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '${(progress * 100).toInt()}%',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 }
 

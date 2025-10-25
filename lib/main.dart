@@ -114,11 +114,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       'Mid Day Shower',
       'Water',
     ],
-    'Sleep': [
-      'Bed Time (B.T.)',
-      'Asleep Time (A.S.T.)',
+    'Sleep Tracking': [
+      'Bed Time',
+      'Sleep Time', 
+      'Mid Day Sleep',
       'Wake Time (W.T.)',
-      'Midday Sleep',
     ],
   };
 
@@ -127,11 +127,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   };
 
   final Set<String> _timeBasedHabits = {
-    'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Gym', 'Bed Time (B.T.)'
+    'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Gym', 'Bed Time', 'Sleep Time', 'Wake Time (W.T.)'
   };
 
   final Set<String> _sleepTrackingHabits = {
-    'Bed Time (B.T.)', 'Asleep Time (A.S.T.)', 'Wake Time (W.T.)', 'Midday Sleep'
+    'Bed Time', 'Sleep Time', 'Mid Day Sleep', 'Wake Time (W.T.)'
   };
 
   final Set<String> _compoundingHabits = {
@@ -176,10 +176,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     'Gym': {HabitState.completed: 25, HabitState.partial: 15, HabitState.missed: 0},
     'Mid Day Shower': {HabitState.completed: 10, HabitState.missed: 0},
     'Water': {HabitState.completed: 5, HabitState.partial: 3, HabitState.missed: 0},
-    'Bed Time (B.T.)': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
-    'Asleep Time (A.S.T.)': {HabitState.completed: 5, HabitState.missed: 0},
+    'Bed Time': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
+    'Sleep Time': {HabitState.onTime: 8, HabitState.delayed: 4, HabitState.missed: 0},
+    'Mid Day Sleep': {HabitState.avoided: 5, HabitState.completed: 2, HabitState.missed: 0},
     'Wake Time (W.T.)': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
-    'Midday Sleep': {HabitState.avoided: 5, HabitState.completed: 0, HabitState.missed: 0},
   };
 
   void _showHabitStateDialog(String habit, int dayIndex) {
@@ -226,7 +226,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   List<HabitState> _getAvailableStates(String habit) {
-    if (habit == 'Midday Sleep') {
+    if (habit == 'Mid Day Sleep') {
       return [HabitState.none, HabitState.avoided, HabitState.completed, HabitState.missed];
     } else if (_prayerHabits.contains(habit)) {
       return [HabitState.none, HabitState.onTime, HabitState.delayed, HabitState.missed];
@@ -1755,7 +1755,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       {'name': 'Personal', 'color': const Color(0xFF30D158)},
       {'name': 'Professional', 'color': const Color(0xFF007AFF)},
       {'name': 'Health', 'color': const Color(0xFF00C7BE)},
-      {'name': 'Sleep', 'color': const Color(0xFF5856D6)},
+      {'name': 'Sleep Tracking', 'color': const Color(0xFF5856D6)},
     ];
 
     return Container(
@@ -2859,6 +2859,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     color: const Color(0xFF00C7BE), // Cyan ring
                   ),
                 ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 25,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Sleep Tracking', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF5856D6), // Purple ring
+                  ),
+                ),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -2946,6 +2955,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               color: const Color(0xFF00C7BE),
               title: 'Health',
               subtitle: '${(_getCategoryProgress('Health', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
+            return _buildLegendItem(
+              color: const Color(0xFF5856D6),
+              title: 'Sleep Tracking',
+              subtitle: '${(_getCategoryProgress('Sleep Tracking', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
             );
           },
         ),

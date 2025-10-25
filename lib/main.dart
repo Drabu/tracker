@@ -1583,7 +1583,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     int bestDailyScore = _getBestDailyScore();
     int todayScore = _getDailyScore(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
     bool achievedBest = todayScore >= bestDailyScore && todayScore > 0;
-    int perfectDays = _getPerfectDaysCount();
     
     return Container(
       padding: const EdgeInsets.all(28),
@@ -1683,10 +1682,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               const SizedBox(width: 20),
               Expanded(
                 child: _buildRecordItem(
-                  value: perfectDays,
-                  label: 'PERFECT DAYS',
-                  icon: Icons.grade,
-                  color: const Color(0xFF30D158),
+                  value: bestDailyScore > todayScore ? bestDailyScore - todayScore : 0,
+                  label: 'BEAT RECORD',
+                  icon: Icons.trending_up,
+                  color: const Color(0xFF007AFF),
                   isHighlighted: false,
                 ),
               ),
@@ -1742,49 +1741,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                           style: TextStyle(
                             fontSize: 11,
                             color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          if (!achievedBest && bestDailyScore > 0)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF007AFF).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF007AFF).withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.trending_up,
-                    color: const Color(0xFF007AFF),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Beat your record!',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: const Color(0xFF007AFF),
-                          ),
-                        ),
-                        Text(
-                          'You need ${bestDailyScore - todayScore + 1} more points',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white.withValues(alpha: 0.6),
                           ),
                         ),
                       ],
@@ -1890,37 +1846,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return bestScore;
   }
 
-  int _getPerfectDaysCount() {
-    int perfectDays = 0;
-    
-    // Check all weeks and days in tracking data
-    for (var weekData in _trackingData.values) {
-      for (var week in weekData.values) {
-        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
-          int totalHabits = 0;
-          int completedHabits = 0;
-          
-          for (var category in _categories.entries) {
-            for (String habit in category.value) {
-              if (!_isHabitDisabled(habit, dayIndex)) {
-                totalHabits++;
-                HabitState? state = week[dayIndex];
-                if (state == HabitState.completed || state == HabitState.onTime) {
-                  completedHabits++;
-                }
-              }
-            }
-          }
-          
-          if (totalHabits > 0 && completedHabits == totalHabits) {
-            perfectDays++;
-          }
-        }
-      }
-    }
-    
-    return perfectDays;
-  }
 
   Widget _buildQuickStatsCard(int dayIndex) {
     int totalCompleted = 0;
@@ -2594,70 +2519,76 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildAppleFitnessStyleCard(int dayIndex) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF2A2D3A),
-            const Color(0xFF1E212E).withValues(alpha: 0.8),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          // Enhanced animated icon with pulse effect
-          TweenAnimationBuilder<double>(
-            duration: const Duration(seconds: 2),
-            tween: Tween(begin: 0.8, end: 1.0),
-            curve: Curves.easeInOut,
-            builder: (context, scale, child) => Transform.scale(
-              scale: scale,
-              child: Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF00C7BE),
-                      const Color(0xFF30D158),
-                      const Color(0xFF007AFF),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF00C7BE).withValues(alpha: 0.4),
-                      blurRadius: 8,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  _getHabitIcon(dayIndex),
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      builder: (context, snapshot) {
+        final now = snapshot.data ?? DateTime.now();
+        final currentMinutes = now.hour * 60 + now.minute;
+        
+        // Get next transition time and calculate remaining minutes
+        int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
+        int remainingMinutes = nextTransitionMinutes - currentMinutes;
+        
+        // Handle day boundary
+        if (remainingMinutes < 0) {
+          remainingMinutes += 1440;
+        }
+        
+        // Calculate total activity duration and progress
+        int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
+        int totalActivityDuration = nextTransitionMinutes - currentActivityStart;
+        
+        // Calculate progress as percentage of time remaining (1.0 = full time, 0.0 = no time)
+        double timeProgress = totalActivityDuration > 0 
+          ? (remainingMinutes / totalActivityDuration.toDouble()).clamp(0.0, 1.0)
+          : 0.0;
+        
+        // Determine border color and width based on progress
+        Color borderColor;
+        double borderWidth;
+        
+        if (timeProgress <= 0.1) { // Less than 10% time remaining
+          borderColor = const Color(0xFFFF453A); // Red
+          borderWidth = 4.0;
+        } else if (timeProgress <= 0.3) { // Less than 30% time remaining
+          borderColor = const Color(0xFFFF9F0A); // Orange
+          borderWidth = 3.5;
+        } else if (timeProgress <= 0.6) { // Less than 60% time remaining
+          borderColor = const Color(0xFFFFD700); // Yellow
+          borderWidth = 3.0;
+        } else {
+          borderColor = const Color(0xFF30D158); // Green
+          borderWidth = 3.0;
+        }
+        
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF2A2D3A),
+                const Color(0xFF1E212E).withValues(alpha: 0.8),
+              ],
             ),
-            onEnd: () => setState(() {}), // Restart animation
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: borderColor,
+              width: borderWidth,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
+          child: Row(
+            children: [
+              // Apple-style continuous animated icon
+              _buildAnimatedHabitIcon(dayIndex),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
@@ -2665,7 +2596,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               children: [
                 Row(
                   children: [
-                    _buildRealtimeClock(),
+                    _buildCountdownTimer(),
                     const Spacer(),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -2712,77 +2643,382 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
         ],
       ),
+        );
+      },
     );
   }
 
-  Widget _buildRealtimeClock() {
+  Widget _buildAnimatedHabitIcon(int dayIndex) {
     return StreamBuilder<DateTime>(
-      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      stream: Stream.periodic(const Duration(milliseconds: 100), (_) => DateTime.now()),
       builder: (context, snapshot) {
         final now = snapshot.data ?? DateTime.now();
-        final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+        final time = now.millisecondsSinceEpoch / 1000.0;
         
-        return Text(
-          timeString,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-            letterSpacing: 1,
+        // Apple-style continuous animations
+        final pulseScale = 0.95 + 0.1 * math.sin(time * 2); // Gentle breathing effect
+        final rotationAngle = math.sin(time * 0.5) * 0.05; // Subtle rotation
+        final glowIntensity = 0.3 + 0.2 * math.sin(time * 3); // Pulsing glow
+        
+        // Color shifts for dynamic effect
+        final colorShift = math.sin(time * 1.5) * 0.1;
+        
+        return Transform.scale(
+          scale: pulseScale,
+          child: Transform.rotate(
+            angle: rotationAngle,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Color.lerp(const Color(0xFF00C7BE), const Color(0xFF30D158), colorShift.abs())!,
+                    Color.lerp(const Color(0xFF30D158), const Color(0xFF007AFF), colorShift.abs())!,
+                    Color.lerp(const Color(0xFF007AFF), const Color(0xFFFF9F0A), colorShift.abs())!,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  transform: GradientRotation(time * 0.3),
+                ),
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00C7BE).withValues(alpha: glowIntensity),
+                    blurRadius: 12 + (4 * math.sin(time * 2.5)),
+                    spreadRadius: 2 + (2 * math.sin(time * 1.8)),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF30D158).withValues(alpha: glowIntensity * 0.6),
+                    blurRadius: 8 + (3 * math.sin(time * 3.2)),
+                    spreadRadius: 1 + (1 * math.sin(time * 2.1)),
+                  ),
+                ],
+              ),
+              child: Transform.scale(
+                scale: 1.0 + 0.05 * math.sin(time * 4), // Icon pulse
+                child: Icon(
+                  _getHabitIcon(dayIndex),
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ),
           ),
         );
       },
     );
   }
 
+  Widget _buildCountdownTimer() {
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      builder: (context, snapshot) {
+        final now = snapshot.data ?? DateTime.now();
+        final currentMinutes = now.hour * 60 + now.minute;
+        final currentSeconds = now.second;
+        
+        // Get next transition time
+        int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
+        int remainingMinutes = nextTransitionMinutes - currentMinutes;
+        int remainingSeconds = 60 - currentSeconds;
+        
+        // Adjust if we're at the exact minute
+        if (remainingSeconds == 60) {
+          remainingSeconds = 0;
+        } else {
+          remainingMinutes -= 1;
+        }
+        
+        // Handle day boundary (going past midnight)
+        if (remainingMinutes < 0) {
+          remainingMinutes += 1440; // Add 24 hours worth of minutes
+        }
+        
+        int hours = remainingMinutes ~/ 60;
+        int minutes = remainingMinutes % 60;
+        
+        String timeString;
+        Color timeColor;
+        
+        if (hours > 0) {
+          timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeColor = Colors.white;
+        } else if (minutes > 5) {
+          timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeColor = Colors.white;
+        } else {
+          timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeColor = minutes <= 1 ? const Color(0xFFFF453A) : const Color(0xFFFF9F0A);
+        }
+        
+        // Calculate countdown progress as visual representation of time remaining
+        int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
+        int totalActivityDuration = nextTransitionMinutes - currentActivityStart;
+        
+        // Progress should decrease as time ticks down
+        // When activity starts: progress = 1.0 (full bar)
+        // When activity ends: progress = 0.0 (empty bar)
+        double countdownProgress = totalActivityDuration > 0 
+          ? (remainingMinutes / totalActivityDuration.toDouble()).clamp(0.0, 1.0)
+          : 0.0;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              timeString,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: timeColor,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'remaining',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withValues(alpha: 0.6),
+                letterSpacing: 0.5,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  int _getNextTransitionTime(int currentMinutes) {
+    // Define all transition times in minutes from midnight
+    final transitions = [
+      120,  // 2:00 AM (end of book reading, start sleep)
+      540,  // 9:00 AM (end of sleep, start morning routine)
+      550,  // 9:10 AM (cold shower to fajr prayer)
+      570,  // 9:30 AM (fajr prayer to quran)
+      580,  // 9:40 AM (end morning routine, start breakfast)
+      630,  // 10:30 AM (end breakfast, start work session 1)
+      720,  // 12:00 PM (end work session 1, start break)
+      740,  // 12:20 PM (end break, start work session 2)
+      810,  // 1:30 PM (end work session 2, start zuhar prayer)
+      840,  // 2:00 PM (end zuhar prayer, start lunch)
+      870,  // 2:30 PM (end lunch, start work session 3)
+      1050, // 4:30 PM (end work session 3, start asr prayer)
+      1065, // 4:45 PM (end asr prayer break)
+      1080, // 5:00 PM (start work session 4)
+      1140, // 6:00 PM (end work session 4, start maghrib prayer)
+      1230, // 7:30 PM (end maghrib prayer, start gym)
+      1320, // 9:00 PM (end gym, start isha prayer)
+      1380, // 11:00 PM (end isha prayer, start book reading)
+    ];
+    
+    // Find the next transition after current time
+    for (int transition in transitions) {
+      if (currentMinutes < transition) {
+        return transition;
+      }
+    }
+    
+    // If no transition found today, return first transition tomorrow (2:00 AM next day)
+    return 120 + 1440; // 2:00 AM next day
+  }
+
+  int _getCurrentActivityStartTime(int currentMinutes) {
+    // Define all transition times in minutes from midnight
+    final transitions = [
+      120,  // 2:00 AM (end of book reading, start sleep)
+      540,  // 9:00 AM (end of sleep, start morning routine)
+      550,  // 9:10 AM (cold shower to fajr prayer)
+      570,  // 9:30 AM (fajr prayer to quran)
+      580,  // 9:40 AM (end morning routine, start breakfast)
+      630,  // 10:30 AM (end breakfast, start work session 1)
+      720,  // 12:00 PM (end work session 1, start break)
+      740,  // 12:20 PM (end break, start work session 2)
+      810,  // 1:30 PM (end work session 2, start zuhar prayer)
+      840,  // 2:00 PM (end zuhar prayer, start lunch)
+      870,  // 2:30 PM (end lunch, start work session 3)
+      1050, // 4:30 PM (end work session 3, start asr prayer)
+      1065, // 4:45 PM (end asr prayer break)
+      1080, // 5:00 PM (start work session 4)
+      1140, // 6:00 PM (end work session 4, start maghrib prayer)
+      1230, // 7:30 PM (end maghrib prayer, start gym)
+      1320, // 9:00 PM (end gym, start isha prayer)
+      1380, // 11:00 PM (end isha prayer, start book reading)
+    ];
+    
+    // Find the last transition before or at current time
+    int activityStart = 120; // Default to 2:00 AM (start of sleep)
+    
+    for (int i = 0; i < transitions.length; i++) {
+      if (currentMinutes >= transitions[i]) {
+        activityStart = transitions[i];
+      } else {
+        break;
+      }
+    }
+    
+    // Handle the case where we're before the first transition (in sleep period)
+    if (currentMinutes < 120) {
+      activityStart = 1380; // 11:00 PM previous day (start of book reading)
+    }
+    
+    return activityStart;
+  }
+
   IconData _getHabitIcon(int dayIndex) {
     final now = DateTime.now();
     final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final totalMinutes = currentHour * 60 + currentMinute;
     
-    if (currentHour >= 5 && currentHour < 7) {
-      return Icons.wb_sunny_outlined;
-    } else if (currentHour >= 7 && currentHour < 9) {
-      return Icons.fitness_center;
-    } else if (currentHour >= 12 && currentHour < 14) {
+    // 9:00 - 9:40 AM: Morning routine (Cold shower, Fajr Prayer, Quran)
+    if (totalMinutes >= 540 && totalMinutes < 580) {
+      if (totalMinutes < 550) {
+        return Icons.shower; // Cold shower
+      } else if (totalMinutes < 570) {
+        return Icons.self_improvement; // Fajr Prayer
+      } else {
+        return Icons.menu_book; // Quran reading
+      }
+    }
+    // 9:40 - 10:30 AM: Breakfast
+    else if (totalMinutes >= 580 && totalMinutes < 630) {
+      return Icons.restaurant;
+    }
+    // 10:30 AM - 12:00 PM: Work Session 1
+    else if (totalMinutes >= 630 && totalMinutes < 720) {
+      return Icons.work;
+    }
+    // 12:00 - 12:20 PM: Break
+    else if (totalMinutes >= 720 && totalMinutes < 740) {
+      return Icons.free_breakfast;
+    }
+    // 12:20 - 1:30 PM: Work Session 2
+    else if (totalMinutes >= 740 && totalMinutes < 810) {
+      return Icons.laptop_mac;
+    }
+    // 1:30 - 2:00 PM: Zuhar Prayer
+    else if (totalMinutes >= 810 && totalMinutes < 840) {
       return Icons.wb_sunny;
-    } else if (currentHour >= 15 && currentHour < 17) {
-      return Icons.self_improvement;
-    } else if (currentHour >= 17 && currentHour < 19) {
+    }
+    // 2:00 - 2:30 PM: Lunch
+    else if (totalMinutes >= 840 && totalMinutes < 870) {
+      return Icons.lunch_dining;
+    }
+    // 2:30 - 4:30 PM: Work Session 3
+    else if (totalMinutes >= 870 && totalMinutes < 1050) {
+      return Icons.code;
+    }
+    // 4:30 - 4:45 PM: Asr Prayer break
+    else if (totalMinutes >= 1050 && totalMinutes < 1065) {
       return Icons.wb_twilight;
-    } else if (currentHour >= 19 && currentHour < 21) {
+    }
+    // 5:00 - 6:00 PM: Work Session 4
+    else if (totalMinutes >= 1080 && totalMinutes < 1140) {
+      return Icons.desktop_mac;
+    }
+    // 6:00 - 7:30 PM: Maghrib Prayer
+    else if (totalMinutes >= 1140 && totalMinutes < 1230) {
+      return Icons.wb_twilight;
+    }
+    // 7:30 - 9:00 PM: Gym
+    else if (totalMinutes >= 1230 && totalMinutes < 1320) {
+      return Icons.fitness_center;
+    }
+    // 9:00 - 11:00 PM: Isha Prayer
+    else if (totalMinutes >= 1320 && totalMinutes < 1440) {
       return Icons.nights_stay;
-    } else if (currentHour >= 21 && currentHour < 23) {
-      return Icons.local_cafe;
-    } else if (currentHour >= 23 || currentHour < 5) {
+    }
+    // 11:00 PM - 2:00 AM: Book reading
+    else if (totalMinutes >= 1380 || totalMinutes < 120) {
+      return Icons.auto_stories;
+    }
+    // 2:00 - 9:00 AM: Sleep time
+    else if (totalMinutes >= 120 && totalMinutes < 540) {
       return Icons.bedtime;
-    } else {
-      return Icons.track_changes;
+    }
+    else {
+      return Icons.access_time;
     }
   }
 
   String _getCurrentHabitInAction(int dayIndex) {
     final now = DateTime.now();
     final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final totalMinutes = currentHour * 60 + currentMinute;
     
-    // Determine current habit based on time of day
-    if (currentHour >= 5 && currentHour < 7) {
-      return "Time for Fajr Prayer";
-    } else if (currentHour >= 7 && currentHour < 9) {
-      return "Morning routine active";
-    } else if (currentHour >= 12 && currentHour < 14) {
-      return "Time for Duhr Prayer";
-    } else if (currentHour >= 15 && currentHour < 17) {
-      return "Time for Asr Prayer";
-    } else if (currentHour >= 17 && currentHour < 19) {
-      return "Time for Maghrib Prayer";
-    } else if (currentHour >= 19 && currentHour < 21) {
-      return "Time for Isha Prayer";
-    } else if (currentHour >= 21 && currentHour < 23) {
-      return "Evening activities";
-    } else if (currentHour >= 23 || currentHour < 5) {
-      return "Sleep time approaching";
-    } else {
-      return "Keep up the great work!";
+    // Schedule starts at 9:00 AM (540 minutes from midnight)
+    // 9:00 - 9:40 AM: Morning routine (Cold shower, Fajr Prayer, Quran)
+    if (totalMinutes >= 540 && totalMinutes < 580) {
+      if (totalMinutes < 550) {
+        return "Cold Shower in progress";
+      } else if (totalMinutes < 570) {
+        return "Fajr Prayer time";
+      } else {
+        return "Quran reading session";
+      }
+    }
+    // 9:40 - 10:30 AM: Breakfast
+    else if (totalMinutes >= 580 && totalMinutes < 630) {
+      return "Breakfast time";
+    }
+    // 10:30 AM - 12:00 PM: Work Session 1
+    else if (totalMinutes >= 630 && totalMinutes < 720) {
+      return "Work Session 1 in progress";
+    }
+    // 12:00 - 12:20 PM: Break
+    else if (totalMinutes >= 720 && totalMinutes < 740) {
+      return "Break time - recharge yourself";
+    }
+    // 12:20 - 1:30 PM: Work Session 2
+    else if (totalMinutes >= 740 && totalMinutes < 810) {
+      return "Work Session 2 in progress";
+    }
+    // 1:30 - 2:00 PM: Zuhar Prayer
+    else if (totalMinutes >= 810 && totalMinutes < 840) {
+      return "Zuhar Prayer time";
+    }
+    // 2:00 - 2:30 PM: Lunch
+    else if (totalMinutes >= 840 && totalMinutes < 870) {
+      return "Lunch break";
+    }
+    // 2:30 - 4:30 PM: Work Session 3
+    else if (totalMinutes >= 870 && totalMinutes < 1050) {
+      return "Work Session 3 in progress";
+    }
+    // 4:30 - 4:45 PM: Asr Prayer break
+    else if (totalMinutes >= 1050 && totalMinutes < 1065) {
+      return "Asr Prayer time";
+    }
+    // 5:00 - 6:00 PM: Work Session 4
+    else if (totalMinutes >= 1080 && totalMinutes < 1140) {
+      return "Work Session 4 in progress";
+    }
+    // 6:00 - 7:30 PM: Maghrib Prayer
+    else if (totalMinutes >= 1140 && totalMinutes < 1230) {
+      return "Maghrib Prayer time";
+    }
+    // 7:30 - 9:00 PM: Gym
+    else if (totalMinutes >= 1230 && totalMinutes < 1320) {
+      return "Gym workout session";
+    }
+    // 9:00 - 11:00 PM: Isha Prayer
+    else if (totalMinutes >= 1320 && totalMinutes < 1440) {
+      return "Isha Prayer time";
+    }
+    // 11:00 PM - 2:00 AM: Book reading (crosses midnight)
+    else if (totalMinutes >= 1380 || totalMinutes < 120) {
+      return "Book reading session";
+    }
+    // 2:00 - 9:00 AM: Sleep time
+    else if (totalMinutes >= 120 && totalMinutes < 540) {
+      return "Sleep time - rest well";
+    }
+    else {
+      return "Transition period";
     }
   }
 
@@ -4748,3 +4984,4 @@ class EnhancedActivityRingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
+

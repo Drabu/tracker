@@ -1357,6 +1357,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       {'name': 'Personal', 'color': const Color(0xFF30D158)},
       {'name': 'Professional', 'color': const Color(0xFF007AFF)},
       {'name': 'Health', 'color': const Color(0xFF00C7BE)},
+      {'name': 'Sleep Tracking', 'color': const Color(0xFF5856D6)},
     ];
 
     return Container(

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'dart:html' as html show window;
+import 'dart:js' as js;
 
 enum HabitState {
   none,
@@ -67,40 +69,43 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   late Animation<double> _ringAnimation;
   
   Timer? _dayUpdateTimer;
+  Timer? _screenKeepAliveTimer;
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   final Map<String, List<String>> _categories = {
-    'Daily Habits': [
-      'Cold Shower',
+    'Deen': [
       'Quran',
-      'Breakfast',
-      'Lunch',
-      'Mid Day Shower',
-      'Gym',
-      'Walk',
-      'Typing',
-      'Water',
-      'Book',
-    ],
-    'Akhira (Salah)': [
       'Fajr',
       'Duhr',
       'Asr',
       'Maghrib',
       'Isha',
+      'Evening Quran',
     ],
-    'Breakfast Items': [
-      'Eggs',
-      'Meal',
-      'Coffee',
-    ],
-    'Guitar Sessions': [
+    'Personal': [
+      'Guitar',
       'Bar Chord',
       'Fingerstyle',
       'Random',
+      'Book',
+      'Walk',
     ],
-    'Sleep Metrics': [
+    'Professional': [
+      'Typing',
+      'Data Structures',
+    ],
+    'Health': [
+      'Breakfast',
+      'Eggs',
+      'Meal',
+      'Coffee',
+      'Cold Shower',
+      'Gym',
+      'Mid Day Shower',
+      'Water',
+    ],
+    'Sleep': [
       'Bed Time (B.T.)',
       'Asleep Time (A.S.T.)',
       'Wake Time (W.T.)',
@@ -120,29 +125,31 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     'Bed Time (B.T.)', 'Asleep Time (A.S.T.)', 'Wake Time (W.T.)', 'Midday Sleep'
   };
 
+
   final Map<String, Map<HabitState, int>> _habitStatePoints = {
     'Fajr': {HabitState.onTime: 30, HabitState.delayed: 20, HabitState.missed: 0},
     'Duhr': {HabitState.onTime: 15, HabitState.delayed: 10, HabitState.missed: 0},
     'Asr': {HabitState.onTime: 15, HabitState.delayed: 10, HabitState.missed: 0},
     'Maghrib': {HabitState.onTime: 15, HabitState.delayed: 10, HabitState.missed: 0},
     'Isha': {HabitState.onTime: 15, HabitState.delayed: 10, HabitState.missed: 0},
-    'Gym': {HabitState.completed: 25, HabitState.partial: 15, HabitState.missed: 0},
-    'Cold Shower': {HabitState.completed: 20, HabitState.missed: 0},
     'Quran': {HabitState.completed: 15, HabitState.partial: 8, HabitState.missed: 0},
-    'Book': {HabitState.completed: 15, HabitState.partial: 8, HabitState.missed: 0},
-    'Walk': {HabitState.completed: 10, HabitState.partial: 5, HabitState.missed: 0},
-    'Typing': {HabitState.completed: 10, HabitState.partial: 5, HabitState.missed: 0},
+    'Evening Quran': {HabitState.completed: 15, HabitState.partial: 8, HabitState.missed: 0},
     'Guitar': {HabitState.completed: 10, HabitState.partial: 5, HabitState.missed: 0},
-    'Breakfast': {HabitState.completed: 5, HabitState.missed: 0},
-    'Lunch': {HabitState.completed: 5, HabitState.missed: 0},
-    'Mid Day Shower': {HabitState.completed: 10, HabitState.missed: 0},
-    'Water': {HabitState.completed: 5, HabitState.partial: 3, HabitState.missed: 0},
-    'Eggs': {HabitState.completed: 3, HabitState.missed: 0},
-    'Meal': {HabitState.completed: 3, HabitState.missed: 0},
-    'Coffee': {HabitState.completed: 2, HabitState.missed: 0},
     'Bar Chord': {HabitState.completed: 8, HabitState.partial: 4, HabitState.missed: 0},
     'Fingerstyle': {HabitState.completed: 8, HabitState.partial: 4, HabitState.missed: 0},
     'Random': {HabitState.completed: 5, HabitState.partial: 3, HabitState.missed: 0},
+    'Book': {HabitState.completed: 15, HabitState.partial: 8, HabitState.missed: 0},
+    'Walk': {HabitState.completed: 10, HabitState.partial: 5, HabitState.missed: 0},
+    'Typing': {HabitState.completed: 10, HabitState.partial: 5, HabitState.missed: 0},
+    'Data Structures': {HabitState.completed: 15, HabitState.partial: 8, HabitState.missed: 0},
+    'Breakfast': {HabitState.completed: 5, HabitState.missed: 0},
+    'Eggs': {HabitState.completed: 3, HabitState.missed: 0},
+    'Meal': {HabitState.completed: 3, HabitState.missed: 0},
+    'Coffee': {HabitState.completed: 2, HabitState.missed: 0},
+    'Cold Shower': {HabitState.completed: 20, HabitState.missed: 0},
+    'Gym': {HabitState.completed: 25, HabitState.partial: 15, HabitState.missed: 0},
+    'Mid Day Shower': {HabitState.completed: 10, HabitState.missed: 0},
+    'Water': {HabitState.completed: 5, HabitState.partial: 3, HabitState.missed: 0},
     'Bed Time (B.T.)': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
     'Asleep Time (A.S.T.)': {HabitState.completed: 5, HabitState.missed: 0},
     'Wake Time (W.T.)': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},
@@ -161,7 +168,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: availableStates.map((state) {
-              int points = _habitStatePoints[habit]?[state] ?? 0;
+              int points = _getHabitPoints(habit, state, dayIndex);
               return ListTile(
                 title: Text(_getStateDisplayName(state)),
                 subtitle: Text('$points points'),
@@ -217,7 +224,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       return [HabitState.none, HabitState.onTime, HabitState.delayed, HabitState.missed];
     } else if (_timeBasedHabits.contains(habit)) {
       return [HabitState.none, HabitState.onTime, HabitState.delayed, HabitState.missed];
-    } else if (['Quran', 'Book', 'Gym', 'Walk', 'Typing', 'Water'].contains(habit)) {
+    } else if (['Quran', 'Evening Quran', 'Book', 'Gym', 'Walk', 'Typing', 'Data Structures', 'Water', 'Guitar'].contains(habit)) {
       return [HabitState.none, HabitState.completed, HabitState.partial, HabitState.missed];
     } else {
       return [HabitState.none, HabitState.completed, HabitState.missed];
@@ -243,6 +250,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
   }
 
+
+  int _getHabitPoints(String habit, HabitState state, int dayIndex) {
+    return _habitStatePoints[habit]?[state] ?? 0;
+  }
+
   int _getDailyScore(int dayIndex) {
     int score = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
@@ -254,7 +266,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       if (!isDisabled) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state != HabitState.none) {
-          score += _habitStatePoints[habit]?[state] ?? 0;
+          score += _getHabitPoints(habit, state, dayIndex);
         }
       }
     }
@@ -324,7 +336,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       if (!isDisabled) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[day] ?? HabitState.none;
         if (state != HabitState.none) {
-          score += _habitStatePoints[habit]?[state] ?? 0;
+          score += _getHabitPoints(habit, state, day);
         }
       }
     }
@@ -390,16 +402,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _buildAppBar(),
-      body: _shouldShowContributionGraph()
-          ? Column(
-              children: [
-                _buildContributionGraph(),
-                Expanded(child: _buildCurrentView()),
-              ],
-            )
-          : _buildCurrentView(),
+    return GestureDetector(
+      onTap: () {
+        // Re-enable wake lock on user interaction (required by many browsers)
+        if (_currentView == ViewType.day) {
+          _tryWebWakeLock();
+        }
+      },
+      child: Scaffold(
+        appBar: _buildAppBar(),
+        body: _shouldShowContributionGraph()
+            ? Column(
+                children: [
+                  _buildContributionGraph(),
+                  Expanded(child: _buildCurrentView()),
+                ],
+              )
+            : _buildCurrentView(),
+      ),
     );
   }
 
@@ -453,6 +473,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   @override
   void dispose() {
     _dayUpdateTimer?.cancel();
+    _screenKeepAliveTimer?.cancel();
     _progressAnimationController.dispose();
     _ringAnimationController.dispose();
     _disableWakeLock();
@@ -473,6 +494,32 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     } catch (e) {
       print('Failed to enable wake lock: $e');
     }
+    
+    // Try web-specific Screen Wake Lock API
+    _tryWebWakeLock();
+    
+    // Start fallback method
+    _startScreenKeepAlive();
+  }
+
+  void _tryWebWakeLock() {
+    try {
+      // Try to use the Screen Wake Lock API directly
+      js.context.callMethod('eval', ['''
+        if ('wakeLock' in navigator) {
+          navigator.wakeLock.request('screen').then(function(wakeLock) {
+            console.log('Screen Wake Lock enabled');
+            window.wakeLockSentinel = wakeLock;
+          }).catch(function(error) {
+            console.log('Screen Wake Lock failed:', error);
+          });
+        } else {
+          console.log('Screen Wake Lock API not supported');
+        }
+      ''']);
+    } catch (e) {
+      print('Web wake lock failed: $e');
+    }
   }
 
   Future<void> _disableWakeLock() async {
@@ -482,6 +529,78 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     } catch (e) {
       print('Failed to disable wake lock: $e');
     }
+    
+    // Disable web wake lock
+    _disableWebWakeLock();
+    
+    // Stop fallback method
+    _stopScreenKeepAlive();
+  }
+
+  void _disableWebWakeLock() {
+    try {
+      js.context.callMethod('eval', ['''
+        if (window.wakeLockSentinel) {
+          window.wakeLockSentinel.release();
+          window.wakeLockSentinel = null;
+          console.log('Screen Wake Lock released');
+        }
+      ''']);
+    } catch (e) {
+      print('Failed to release web wake lock: $e');
+    }
+  }
+
+  void _startScreenKeepAlive() {
+    // Additional method to keep screen active on web
+    // Trigger a minor UI update every 25 seconds to prevent screen sleep
+    _screenKeepAliveTimer = Timer.periodic(const Duration(seconds: 25), (timer) {
+      if (mounted && _currentView == ViewType.day) {
+        // Multiple fallback methods to keep screen active
+        try {
+          // Method 1: Trigger very subtle animation
+          _ringAnimationController.forward(from: 0.999);
+          
+          // Method 2: Create invisible video element to prevent sleep
+          js.context.callMethod('eval', ['''
+            if (!window.keepAliveVideo) {
+              var video = document.createElement('video');
+              video.src = 'data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAACAEFhdGEBAQAAAREAAAABAAAARAAAaGQAABCkAAAQpAAAAAADCOxPcAAAwBQAAAe8AAAABAAAAAEACo/UgEwEAABGaBgn40AE=';
+              video.loop = true;
+              video.muted = true;
+              video.style.opacity = '0';
+              video.style.position = 'absolute';
+              video.style.zIndex = '-1';
+              document.body.appendChild(video);
+              video.play().catch(function(e) { console.log('Video play failed:', e); });
+              window.keepAliveVideo = video;
+            }
+          ''']);
+        } catch (e) {
+          print('Keep-alive fallback failed: $e');
+        }
+      }
+    });
+    print('Enhanced screen keep-alive timer started');
+  }
+
+  void _stopScreenKeepAlive() {
+    _screenKeepAliveTimer?.cancel();
+    _screenKeepAliveTimer = null;
+    
+    // Clean up video element
+    try {
+      js.context.callMethod('eval', ['''
+        if (window.keepAliveVideo) {
+          window.keepAliveVideo.remove();
+          window.keepAliveVideo = null;
+        }
+      ''']);
+    } catch (e) {
+      print('Failed to clean up keep-alive video: $e');
+    }
+    
+    print('Screen keep-alive timer stopped');
   }
 
   void _setupDayUpdateTimer() {
@@ -547,7 +666,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           });
         });
       });
-      
+
       // Save to SharedPreferences
       await prefs.setString('trackingData', jsonEncode(trackingDataJson));
       await prefs.setString('timeData', jsonEncode(timeDataJson));
@@ -1795,11 +1914,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   // Individual Category Rings Widget
   Widget _buildIndividualCategoryRings(int dayIndex) {
     final categories = [
-      {'name': 'Akhira (Salah)', 'color': const Color(0xFFFF453A), 'title': 'Prayers'},
-      {'name': 'Daily Habits', 'color': const Color(0xFF30D158), 'title': 'Habits'},
-      {'name': 'Guitar Sessions', 'color': const Color(0xFFFF9F0A), 'title': 'Guitar'},
-      {'name': 'Water', 'color': const Color(0xFF00C7BE), 'title': 'Water'},
-      {'name': 'Sleep Metrics', 'color': const Color(0xFF007AFF), 'title': 'Sleep'},
+      {'name': 'Deen', 'color': const Color(0xFFFF453A), 'title': 'Deen'},
+      {'name': 'Personal', 'color': const Color(0xFF30D158), 'title': 'Personal'},
+      {'name': 'Professional', 'color': const Color(0xFFFF9F0A), 'title': 'Professional'},
+      {'name': 'Health', 'color': const Color(0xFF00C7BE), 'title': 'Health'},
+      {'name': 'Sleep', 'color': const Color(0xFF007AFF), 'title': 'Sleep'},
     ];
 
     return Container(
@@ -1938,14 +2057,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryScore(String categoryName, int dayIndex) {
-    List<String> habits;
-    
-    // Handle special Water category
-    if (categoryName == 'Water') {
-      habits = ['Water'];
-    } else {
-      habits = _categories[categoryName] ?? [];
-    }
+    List<String> habits = _categories[categoryName] ?? [];
     
     int currentScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
@@ -1965,14 +2077,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryMaxScore(String categoryName, int dayIndex) {
-    List<String> habits;
-    
-    // Handle special Water category
-    if (categoryName == 'Water') {
-      habits = ['Water'];
-    } else {
-      habits = _categories[categoryName] ?? [];
-    }
+    List<String> habits = _categories[categoryName] ?? [];
     
     int maxScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
@@ -2037,7 +2142,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   builder: (context, child) => _buildActivityRing(
                     radius: 85,
                     strokeWidth: 12,
-                    progress: _getCategoryProgress('Akhira (Salah)', dayIndex) * _ringAnimation.value,
+                    progress: _getCategoryProgress('Deen', dayIndex) * _ringAnimation.value,
                     color: const Color(0xFFFF453A), // Red ring
                   ),
                 ),
@@ -2046,7 +2151,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   builder: (context, child) => _buildActivityRing(
                     radius: 65,
                     strokeWidth: 12,
-                    progress: _getCategoryProgress('Daily Habits', dayIndex) * _ringAnimation.value,
+                    progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
                     color: const Color(0xFF30D158), // Green ring
                   ),
                 ),
@@ -2055,8 +2160,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   builder: (context, child) => _buildActivityRing(
                     radius: 45,
                     strokeWidth: 12,
-                    progress: _getCategoryProgress('Sleep Metrics', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFF007AFF), // Blue ring
+                    progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF00C7BE), // Cyan ring
                   ),
                 ),
                 Column(
@@ -2118,8 +2223,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
               color: const Color(0xFFFF453A),
-              title: 'Prayers',
-              subtitle: '${(_getCategoryProgress('Akhira (Salah)', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+              title: 'Deen',
+              subtitle: '${(_getCategoryProgress('Deen', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
             );
           },
         ),
@@ -2131,8 +2236,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
               color: const Color(0xFF30D158),
-              title: 'Daily Habits',
-              subtitle: '${(_getCategoryProgress('Daily Habits', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+              title: 'Personal',
+              subtitle: '${(_getCategoryProgress('Personal', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
             );
           },
         ),
@@ -2143,9 +2248,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             DateTime now = DateTime.now();
             int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
-              color: const Color(0xFF007AFF),
-              title: 'Sleep',
-              subtitle: '${(_getCategoryProgress('Sleep Metrics', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+              color: const Color(0xFF00C7BE),
+              title: 'Health',
+              subtitle: '${(_getCategoryProgress('Health', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
             );
           },
         ),
@@ -2196,14 +2301,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   double _getCategoryProgress(String categoryName, int dayIndex) {
-    List<String> habits;
-    
-    // Handle special Water category
-    if (categoryName == 'Water') {
-      habits = ['Water'];
-    } else {
-      habits = _categories[categoryName] ?? [];
-    }
+    List<String> habits = _categories[categoryName] ?? [];
     
     int currentScore = 0;
     int maxScore = 0;

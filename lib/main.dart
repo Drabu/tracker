@@ -132,6 +132,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     'Gym', 'Water' // Health
   };
 
+  // Development mode flag - set to true to enable all habits on weekends
+  static const bool _isDevelopmentMode = true;
+
+  bool _isHabitDisabled(String habit, int dayIndex) {
+    if (_isDevelopmentMode) return false; // Never disable habits in dev mode
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    bool isPrayer = _prayerHabits.contains(habit);
+    return !isPrayer && isWeekend; // Only disable non-prayer habits on weekends
+  }
+
 
   final Map<String, Map<HabitState, int>> _habitStatePoints = {
     'Fajr': {HabitState.onTime: 30, HabitState.delayed: 20, HabitState.missed: 0},
@@ -264,13 +274,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   int _getDailyScore(int dayIndex) {
     int score = 0;
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in _habitStatePoints.keys) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend; // Only disable non-prayer habits on weekends
-      
-      if (!isDisabled) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state != HabitState.none) {
           score += _getHabitPoints(habit, state, dayIndex);
@@ -302,13 +308,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   int _getMaxDailyScoreForDay(int dayIndex) {
     int maxScore = 0;
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in _habitStatePoints.keys) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend; // Only disable non-prayer habits on weekends
-      
-      if (!isDisabled) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
         Map<HabitState, int> statePoints = _habitStatePoints[habit]!;
         int maxHabitPoints = statePoints.values.fold(0, (max, points) => points > max ? points : max);
         maxScore += maxHabitPoints;
@@ -334,13 +336,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   int _getHabitWeeklyScore(String habit) {
     int score = 0;
-    bool isPrayer = _prayerHabits.contains(habit);
     
     for (int day = 0; day < 7; day++) {
-      bool isWeekend = day == 5 || day == 6;
-      bool isDisabled = !isPrayer && isWeekend; // Only disable non-prayer habits on weekends
-      
-      if (!isDisabled) {
+      if (!_isHabitDisabled(habit, day)) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[day] ?? HabitState.none;
         if (state != HabitState.none) {
           score += _getHabitPoints(habit, state, day);
@@ -1256,8 +1254,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     
     // Filter habits for weekends
     List<String> availableHabits = categoryHabits.where((habit) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      return isPrayer || !isWeekend; // Show prayers always, others only on weekdays
+      return !_isHabitDisabled(habit, dayIndex);
     }).toList();
 
     return Container(
@@ -1549,13 +1546,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getCategoryCompletedCount(String categoryName, int dayIndex) {
     List<String> habits = _categories[categoryName] ?? [];
     int completed = 0;
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in habits) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend;
-      
-      if (!isDisabled) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
           completed++;
@@ -1568,13 +1561,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getCategoryTotalCount(String categoryName, int dayIndex) {
     List<String> habits = _categories[categoryName] ?? [];
     int total = 0;
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in habits) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend;
-      
-      if (!isDisabled) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
         total++;
       }
     }
@@ -1678,9 +1667,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildDailyHabitItem(String habit, int dayIndex) {
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
-    bool isPrayer = _prayerHabits.contains(habit);
-    bool isDisabled = !isPrayer && isWeekend;
+    bool isDisabled = _isHabitDisabled(habit, dayIndex);
     bool isSleepTracking = _sleepTrackingHabits.contains(habit);
     
     HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
@@ -1988,9 +1975,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 ),
               ),
               ...List.generate(7, (dayIndex) {
-                bool isWeekend = dayIndex == 5 || dayIndex == 6;
-                bool isPrayer = _prayerHabits.contains(habit);
-                bool isDisabled = !isPrayer && isWeekend;
+                bool isDisabled = _isHabitDisabled(habit, dayIndex);
                 
                 HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
                 
@@ -2270,7 +2255,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ...List.generate(7, (dayIndex) {
               bool isWeekend = dayIndex == 5 || dayIndex == 6; // Saturday (5) and Sunday (6)
               bool isPrayer = _prayerHabits.contains(habit);
-              bool isDisabled = !isPrayer && isWeekend; // Only disable non-prayer habits on weekends
+              bool isDisabled = _isHabitDisabled(habit, dayIndex);
               
               HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
               
@@ -2465,8 +2450,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in habits) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend;
+      bool isDisabled = _isHabitDisabled(habit, dayIndex);
       
       if (!isDisabled) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
@@ -2485,8 +2469,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in habits) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend;
+      bool isDisabled = _isHabitDisabled(habit, dayIndex);
       
       if (!isDisabled) {
         maxScore += _getMaxHabitPoints(habit);
@@ -2711,8 +2694,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     for (String habit in habits) {
-      bool isPrayer = _prayerHabits.contains(habit);
-      bool isDisabled = !isPrayer && isWeekend;
+      bool isDisabled = _isHabitDisabled(habit, dayIndex);
       
       if (!isDisabled) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
@@ -2881,9 +2863,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildAppleStyleHabitItem(String habit, int dayIndex) {
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
-    bool isPrayer = _prayerHabits.contains(habit);
-    bool isDisabled = !isPrayer && isWeekend;
+    bool isDisabled = _isHabitDisabled(habit, dayIndex);
     bool isSleepTracking = _sleepTrackingHabits.contains(habit);
     
     HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
@@ -3033,8 +3013,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         bool isWeekend = dayIndex == 5 || dayIndex == 6;
         
         for (String habit in compoundingInCategory) {
-          bool isPrayer = _prayerHabits.contains(habit);
-          bool isDisabled = !isPrayer && isWeekend;
+          bool isDisabled = _isHabitDisabled(habit, dayIndex);
           
           if (!isDisabled) {
             totalCount++;

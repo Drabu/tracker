@@ -1374,8 +1374,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
-          _buildProgressScoreCard(),
-          const SizedBox(height: 16),
           _buildAppleFitnessStyleCard(dayIndex),
           const SizedBox(height: 24),
           _buildActivityRingsWidget(dayIndex),
@@ -1411,64 +1409,79 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 20),
-          SizedBox(
-            height: 160,
-            width: 160,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 70,
-                    strokeWidth: 10,
-                    progress: _getCategoryProgress('Deen', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFFFF453A), // Red ring
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 55,
-                    strokeWidth: 10,
-                    progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFF30D158), // Green ring
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 40,
-                    strokeWidth: 10,
-                    progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFF00C7BE), // Cyan ring
-                  ),
-                ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                height: 120,
+                width: 120,
+                child: Stack(
+                  alignment: Alignment.center,
                   children: [
-                    Text(
-                      '${_getDailyScore(dayIndex)}',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        letterSpacing: -1,
+                    AnimatedBuilder(
+                      animation: _ringAnimation,
+                      builder: (context, child) => _buildActivityRing(
+                        radius: 55,
+                        strokeWidth: 8,
+                        progress: _getCategoryProgress('Deen', dayIndex) * _ringAnimation.value,
+                        color: const Color(0xFFFF453A), // Red ring
                       ),
                     ),
-                    Text(
-                      'POINTS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withValues(alpha: 0.7),
-                        letterSpacing: 1,
+                    AnimatedBuilder(
+                      animation: _ringAnimation,
+                      builder: (context, child) => _buildActivityRing(
+                        radius: 43,
+                        strokeWidth: 8,
+                        progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
+                        color: const Color(0xFF30D158), // Green ring
+                      ),
+                    ),
+                    AnimatedBuilder(
+                      animation: _ringAnimation,
+                      builder: (context, child) => _buildActivityRing(
+                        radius: 31,
+                        strokeWidth: 8,
+                        progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
+                        color: const Color(0xFF00C7BE), // Cyan ring
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 24),
+              Column(
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        '${_getDailyScore(dayIndex)}',
+                        style: const TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.star,
+                        color: Colors.white.withValues(alpha: 0.8),
+                        size: 20,
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'TODAY',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
@@ -2059,8 +2072,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 Text(
                   _getCurrentHabitInAction(dayIndex),
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
               ],

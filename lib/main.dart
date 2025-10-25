@@ -1387,97 +1387,189 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildActivityRingsWidget(int dayIndex) {
+    final deenProgress = _getCategoryProgress('Deen', dayIndex);
+    final personalProgress = _getCategoryProgress('Personal', dayIndex);
+    final healthProgress = _getCategoryProgress('Health', dayIndex);
+    final totalProgress = (deenProgress + personalProgress + healthProgress) / 3;
+    
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.85),
+          ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Text(
-            'ACTIVITY RINGS',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.6),
-              letterSpacing: 0.5,
-            ),
+          Row(
+            children: [
+              Text(
+                'ACTIVITY RINGS',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: totalProgress >= 0.8 
+                    ? const Color(0xFF30D158).withValues(alpha: 0.2)
+                    : const Color(0xFFFF9F0A).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: totalProgress >= 0.8 
+                      ? const Color(0xFF30D158).withValues(alpha: 0.4)
+                      : const Color(0xFFFF9F0A).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Text(
+                  totalProgress >= 0.8 ? 'EXCELLENT' : 'ON TRACK',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: totalProgress >= 0.8 
+                      ? const Color(0xFF30D158)
+                      : const Color(0xFFFF9F0A),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              SizedBox(
-                height: 120,
-                width: 120,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    AnimatedBuilder(
-                      animation: _ringAnimation,
-                      builder: (context, child) => _buildActivityRing(
-                        radius: 55,
-                        strokeWidth: 8,
-                        progress: _getCategoryProgress('Deen', dayIndex) * _ringAnimation.value,
-                        color: const Color(0xFFFF453A), // Red ring
-                      ),
-                    ),
-                    AnimatedBuilder(
-                      animation: _ringAnimation,
-                      builder: (context, child) => _buildActivityRing(
-                        radius: 43,
-                        strokeWidth: 8,
-                        progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
-                        color: const Color(0xFF30D158), // Green ring
-                      ),
-                    ),
-                    AnimatedBuilder(
-                      animation: _ringAnimation,
-                      builder: (context, child) => _buildActivityRing(
-                        radius: 31,
-                        strokeWidth: 8,
-                        progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
-                        color: const Color(0xFF00C7BE), // Cyan ring
-                      ),
+              // Enhanced rings with glow effect
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(80),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF453A).withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      spreadRadius: 2,
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 24),
-              Column(
-                children: [
-                  Row(
+                child: SizedBox(
+                  height: 130,
+                  width: 130,
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Text(
-                        '${_getDailyScore(dayIndex)}',
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: -1,
+                      AnimatedBuilder(
+                        animation: _ringAnimation,
+                        builder: (context, child) => _buildEnhancedActivityRing(
+                          radius: 60,
+                          strokeWidth: 9,
+                          progress: deenProgress * _ringAnimation.value,
+                          color: const Color(0xFFFF453A),
+                          glowColor: const Color(0xFFFF453A).withValues(alpha: 0.4),
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        Icons.star,
-                        color: Colors.white.withValues(alpha: 0.8),
-                        size: 20,
+                      AnimatedBuilder(
+                        animation: _ringAnimation,
+                        builder: (context, child) => _buildEnhancedActivityRing(
+                          radius: 46,
+                          strokeWidth: 9,
+                          progress: personalProgress * _ringAnimation.value,
+                          color: const Color(0xFF30D158),
+                          glowColor: const Color(0xFF30D158).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      AnimatedBuilder(
+                        animation: _ringAnimation,
+                        builder: (context, child) => _buildEnhancedActivityRing(
+                          radius: 32,
+                          strokeWidth: 9,
+                          progress: healthProgress * _ringAnimation.value,
+                          color: const Color(0xFF00C7BE),
+                          glowColor: const Color(0xFF00C7BE).withValues(alpha: 0.4),
+                        ),
                       ),
                     ],
                   ),
+                ),
+              ),
+              const SizedBox(width: 32),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Animated points with sparkle effect
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(milliseconds: 800),
+                    tween: Tween(begin: 0, end: _getDailyScore(dayIndex).toDouble()),
+                    builder: (context, animatedScore, child) => Row(
+                      children: [
+                        Text(
+                          '${animatedScore.toInt()}',
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: -2,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TweenAnimationBuilder<double>(
+                          duration: const Duration(seconds: 2),
+                          tween: Tween(begin: 0.6, end: 1.0),
+                          curve: Curves.easeInOut,
+                          builder: (context, scale, child) => Transform.scale(
+                            scale: scale,
+                            child: Icon(
+                              Icons.auto_awesome,
+                              color: const Color(0xFFFFD700),
+                              size: 24,
+                            ),
+                          ),
+                          onEnd: () => setState(() {}),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Text(
-                    'TODAY',
+                    'POINTS TODAY',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
                       color: Colors.white.withValues(alpha: 0.6),
-                      letterSpacing: 1,
+                      letterSpacing: 1.2,
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Progress indicators
+                  Column(
+                    children: [
+                      _buildProgressIndicator('Deen', deenProgress, const Color(0xFFFF453A)),
+                      const SizedBox(height: 6),
+                      _buildProgressIndicator('Personal', personalProgress, const Color(0xFF30D158)),
+                      const SizedBox(height: 6),
+                      _buildProgressIndicator('Health', healthProgress, const Color(0xFF00C7BE)),
+                    ],
                   ),
                 ],
               ),
@@ -2033,48 +2125,116 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildAppleFitnessStyleCard(int dayIndex) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.8),
+          ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          // Apple Fitness-style icon
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF00C7BE), Color(0xFF30D158)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          // Enhanced animated icon with pulse effect
+          TweenAnimationBuilder<double>(
+            duration: const Duration(seconds: 2),
+            tween: Tween(begin: 0.8, end: 1.0),
+            curve: Curves.easeInOut,
+            builder: (context, scale, child) => Transform.scale(
+              scale: scale,
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF00C7BE),
+                      const Color(0xFF30D158),
+                      const Color(0xFF007AFF),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00C7BE).withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _getHabitIcon(dayIndex),
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
-              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.track_changes,
-              color: Colors.white,
-              size: 24,
-            ),
+            onEnd: () => setState(() {}), // Restart animation
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildRealtimeClock(),
-                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    _buildRealtimeClock(),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF30D158).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF30D158).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        'ACTIVE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF30D158),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 Text(
                   _getCurrentHabitInAction(dayIndex),
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.9),
+                    color: Colors.white.withValues(alpha: 0.95),
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _getHabitMotivation(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
               ],
@@ -2105,6 +2265,31 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  IconData _getHabitIcon(int dayIndex) {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    
+    if (currentHour >= 5 && currentHour < 7) {
+      return Icons.wb_sunny_outlined;
+    } else if (currentHour >= 7 && currentHour < 9) {
+      return Icons.fitness_center;
+    } else if (currentHour >= 12 && currentHour < 14) {
+      return Icons.wb_sunny;
+    } else if (currentHour >= 15 && currentHour < 17) {
+      return Icons.self_improvement;
+    } else if (currentHour >= 17 && currentHour < 19) {
+      return Icons.wb_twilight;
+    } else if (currentHour >= 19 && currentHour < 21) {
+      return Icons.nights_stay;
+    } else if (currentHour >= 21 && currentHour < 23) {
+      return Icons.local_cafe;
+    } else if (currentHour >= 23 || currentHour < 5) {
+      return Icons.bedtime;
+    } else {
+      return Icons.track_changes;
+    }
+  }
+
   String _getCurrentHabitInAction(int dayIndex) {
     final now = DateTime.now();
     final currentHour = now.hour;
@@ -2129,6 +2314,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     } else {
       return "Keep up the great work!";
     }
+  }
+
+  String _getHabitMotivation() {
+    final motivations = [
+      "Stay consistent, stay strong",
+      "Every habit counts",
+      "Building a better you",
+      "Progress over perfection",
+      "Small steps, big changes",
+      "You're doing amazing",
+    ];
+    final now = DateTime.now();
+    return motivations[now.hour % motivations.length];
   }
 
   Widget _buildCategoryProgressSection(int dayIndex) {
@@ -3299,6 +3497,64 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  Widget _buildEnhancedActivityRing({
+    required double radius,
+    required double strokeWidth,
+    required double progress,
+    required Color color,
+    required Color glowColor,
+  }) {
+    return CustomPaint(
+      size: Size(radius * 2, radius * 2),
+      painter: EnhancedActivityRingPainter(
+        progress: progress,
+        color: color,
+        glowColor: glowColor,
+        strokeWidth: strokeWidth,
+      ),
+    );
+  }
+
+  Widget _buildProgressIndicator(String label, double progress, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.4),
+                blurRadius: 4,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '${(progress * 100).toInt()}%',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.white.withValues(alpha: 0.9),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildRingLegend() {
     return Column(
       children: [
@@ -3940,6 +4196,83 @@ class ActivityRingPainter extends CustomPainter {
       false,
       progressPaint,
     );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class EnhancedActivityRingPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final Color glowColor;
+  final double strokeWidth;
+
+  EnhancedActivityRingPainter({
+    required this.progress,
+    required this.color,
+    required this.glowColor,
+    required this.strokeWidth,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - strokeWidth / 2;
+
+    // Background ring with subtle glow
+    final backgroundPaint = Paint()
+      ..color = color.withValues(alpha: 0.15)
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawCircle(center, radius, backgroundPaint);
+
+    // Glow effect for progress ring
+    final glowPaint = Paint()
+      ..color = glowColor
+      ..strokeWidth = strokeWidth + 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 3);
+
+    const startAngle = -math.pi / 2; // Start at top
+    final sweepAngle = 2 * math.pi * progress;
+
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        false,
+        glowPaint,
+      );
+    }
+
+    // Progress ring with gradient effect
+    final progressPaint = Paint()
+      ..shader = LinearGradient(
+        colors: [
+          color,
+          color.withValues(alpha: 0.8),
+          color,
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(Rect.fromCircle(center: center, radius: radius))
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        startAngle,
+        sweepAngle,
+        false,
+        progressPaint,
+      );
+    }
   }
 
   @override

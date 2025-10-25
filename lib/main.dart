@@ -565,79 +565,87 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return GestureDetector(
       onTap: _onUserInteraction,
       onPanDown: (_) => _onUserInteraction(),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF0D1117),
-              const Color(0xFF161B22),
-              const Color(0xFF21262D),
-            ],
+      child: Material(
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF0D1117),
+                const Color(0xFF161B22),
+                const Color(0xFF21262D),
+              ],
+            ),
           ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Large animated habit icon
-              _buildLargeAnimatedIcon(todayIndex),
-              const SizedBox(height: 40),
-              
-              // Current habit text
-              Text(
-                _getCurrentHabitInAction(todayIndex),
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w300,
-                  color: Colors.white,
-                  letterSpacing: 1.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Large countdown timer
-              _buildLargeCountdownTimer(),
-              
-              const SizedBox(height: 60),
-              
-              // Current time display
-              StreamBuilder<DateTime>(
-                stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
-                builder: (context, snapshot) {
-                  final currentTime = snapshot.data ?? DateTime.now();
-                  final timeString = '${currentTime.hour.toString().padLeft(2, '0')}:${currentTime.minute.toString().padLeft(2, '0')}';
+          child: DefaultTextStyle(
+            style: const TextStyle(
+              color: Colors.white,
+              decoration: TextDecoration.none,
+            ),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Large animated habit icon
+                  _buildLargeAnimatedIcon(todayIndex),
+                  const SizedBox(height: 40),
                   
-                  return Text(
-                    timeString,
+                  // Current habit text
+                  Text(
+                    _getCurrentHabitInAction(todayIndex),
                     style: const TextStyle(
-                      fontSize: 72,
-                      fontWeight: FontWeight.w100,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w300,
                       color: Colors.white,
-                      letterSpacing: 4,
+                      letterSpacing: 1.5,
                     ),
-                  );
-                },
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Subtle hint to tap
-              Opacity(
-                opacity: 0.4,
-                child: Text(
-                  'Tap anywhere to return',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withValues(alpha: 0.6),
-                    letterSpacing: 1,
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Large countdown timer
+                  _buildLargeCountdownTimer(),
+                  
+                  const SizedBox(height: 60),
+                  
+                  // Current time display
+                  StreamBuilder<DateTime>(
+                    stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+                    builder: (context, snapshot) {
+                      final currentTime = snapshot.data ?? DateTime.now();
+                      final timeString = '${currentTime.hour.toString().padLeft(2, '0')}:${currentTime.minute.toString().padLeft(2, '0')}';
+                      
+                      return Text(
+                        timeString,
+                        style: const TextStyle(
+                          fontSize: 72,
+                          fontWeight: FontWeight.w100,
+                          color: Colors.white,
+                          letterSpacing: 4,
+                        ),
+                      );
+                    },
+                  ),
+                  
+                  const SizedBox(height: 20),
+                  
+                  // Subtle hint to tap
+                  Opacity(
+                    opacity: 0.4,
+                    child: Text(
+                      'Tap anywhere to return',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -737,13 +745,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           timeColor = minutes <= 5 ? const Color(0xFFFF9F0A) : Colors.white;
         }
         
-        return Text(
-          timeString,
-          style: TextStyle(
-            fontSize: 48,
-            fontWeight: FontWeight.w200,
-            color: timeColor,
-            letterSpacing: 3,
+        return Material(
+          color: Colors.transparent,
+          child: Text(
+            timeString,
+            style: TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.w200,
+              color: timeColor,
+              letterSpacing: 3,
+              decoration: TextDecoration.none,
+            ),
           ),
         );
       },
@@ -2294,6 +2306,105 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  Widget _buildScreensaverButton() {
+    DateTime now = DateTime.now();
+    int todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
+    
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _isIdleMode = true;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF2A2D3A),
+              const Color(0xFF1E212E).withValues(alpha: 0.85),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            // Left side - Icon
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: const Color(0xFF5856D6),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF5856D6).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.visibility,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
+            
+            const SizedBox(width: 16),
+            
+            // Right side - Description
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Focus Mode',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'View current habit in full screen focus',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Arrow indicator
+            Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white.withValues(alpha: 0.4),
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStatItem({
     required int value,
     required String label,
@@ -2374,6 +2485,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
           const SizedBox(height: 16),
           _buildQuickStatsCard(dayIndex),
+          const SizedBox(height: 24),
+          _buildScreensaverButton(),
           const SizedBox(height: 24),
           ...focusCategories.map((category) => 
             _buildFocusCategoryCard(

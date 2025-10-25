@@ -1172,20 +1172,409 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     int maxScore = _getMaxDailyScoreForDay(todayIndex);
     double percentage = maxScore > 0 ? currentScore / maxScore : 0.0;
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        bool isTablet = constraints.maxWidth > 800;
+        
+        if (isTablet) {
+          return _buildTabletDashboard(todayIndex, currentScore);
+        } else {
+          return _buildMobileDashboard(todayIndex, currentScore, maxScore, percentage);
+        }
+      },
+    );
+  }
+
+  Widget _buildMobileDashboard(int todayIndex, int currentScore, int maxScore, double percentage) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _buildIndividualCategoryRings(todayIndex),
+        _buildTodaysFocusSection(todayIndex),
         const SizedBox(height: 24),
-        _buildAppleStyleActivityRings(todayIndex),
-        const SizedBox(height: 32),
-        _buildAppleStyleDailyProgress(currentScore, maxScore, percentage),
-        const SizedBox(height: 24),
-        _buildCompoundingHabitsChart(todayIndex),
-        const SizedBox(height: 24),
-        ..._buildAppleStyleHabitSections(todayIndex),
+        _buildYourProgressSection(todayIndex, currentScore),
       ],
     );
+  }
+
+  Widget _buildTabletDashboard(int todayIndex, int currentScore) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: _buildTodaysFocusSection(todayIndex),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: _buildYourProgressSection(todayIndex, currentScore),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTodaysFocusSection(int dayIndex) {
+    final focusCategories = [
+      {
+        'name': 'Deen', 
+        'color': const Color(0xFFFF453A),
+        'tasks': [
+          'Read Quran for 15 min',
+          'Dhikr & Istighfar',
+        ]
+      },
+      {
+        'name': 'Personal', 
+        'color': const Color(0xFF30D158),
+        'tasks': [
+          'Meditate (10 min)',
+          'Journal',
+        ]
+      },
+      {
+        'name': 'Professional', 
+        'color': const Color(0xFF007AFF),
+        'tasks': [
+          'Project Alpha update',
+          'Plan team meeting',
+        ]
+      },
+    ];
+
+    return Container(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TODAY\'S FOCUS',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...focusCategories.map((category) => 
+            _buildFocusCategoryCard(
+              category['name'] as String,
+              category['color'] as Color,
+              category['tasks'] as List<String>,
+              dayIndex,
+            )
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFocusCategoryCard(String categoryName, Color categoryColor, List<String> tasks, int dayIndex) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: categoryColor,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                categoryName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...tasks.map((task) => _buildTaskItem(task, false)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                Icons.add,
+                color: Colors.white.withValues(alpha: 0.6),
+                size: 16,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Add Task',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTaskItem(String taskName, bool isCompleted) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () {
+              // Toggle task completion
+            },
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: isCompleted ? const Color(0xFF30D158) : Colors.transparent,
+                border: Border.all(
+                  color: isCompleted ? const Color(0xFF30D158) : Colors.white.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: isCompleted 
+                ? const Icon(Icons.check, color: Colors.white, size: 14)
+                : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              taskName,
+              style: TextStyle(
+                fontSize: 16,
+                color: isCompleted 
+                  ? Colors.white.withValues(alpha: 0.6)
+                  : Colors.white,
+                decoration: isCompleted ? TextDecoration.lineThrough : null,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildYourProgressSection(int dayIndex, int currentScore) {
+    return Container(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'YOUR PROGRESS',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildProgressScoreCard(currentScore),
+          const SizedBox(height: 24),
+          _buildCategoryProgressSection(dayIndex),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressScoreCard(int currentScore) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$currentScore',
+            style: const TextStyle(
+              fontSize: 48,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            'POINTS',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.6),
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Earned Today',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryProgressSection(int dayIndex) {
+    final progressCategories = [
+      {'name': 'Deen', 'color': const Color(0xFFFF453A)},
+      {'name': 'Personal', 'color': const Color(0xFF30D158)},
+      {'name': 'Professional', 'color': const Color(0xFF007AFF)},
+      {'name': 'Health', 'color': const Color(0xFF00C7BE)},
+      {'name': 'Sleep', 'color': const Color(0xFF5856D6)},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'CATEGORY PROGRESS',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.6),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...progressCategories.map((category) => 
+            _buildCategoryProgressItem(
+              category['name'] as String,
+              category['color'] as Color,
+              dayIndex,
+            )
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryProgressItem(String categoryName, Color categoryColor, int dayIndex) {
+    double progress = _getCategoryProgress(categoryName, dayIndex);
+    int completed = _getCategoryCompletedCount(categoryName, dayIndex);
+    int total = _getCategoryTotalCount(categoryName, dayIndex);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                categoryName,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                '$completed/$total tasks (${(progress * 100).toInt()}%)',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 6,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(3),
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            child: AnimatedBuilder(
+              animation: _progressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: progress * _progressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    color: categoryColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getCategoryCompletedCount(String categoryName, int dayIndex) {
+    List<String> habits = _categories[categoryName] ?? [];
+    int completed = 0;
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    
+    for (String habit in habits) {
+      bool isPrayer = _prayerHabits.contains(habit);
+      bool isDisabled = !isPrayer && isWeekend;
+      
+      if (!isDisabled) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+          completed++;
+        }
+      }
+    }
+    return completed;
+  }
+
+  int _getCategoryTotalCount(String categoryName, int dayIndex) {
+    List<String> habits = _categories[categoryName] ?? [];
+    int total = 0;
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    
+    for (String habit in habits) {
+      bool isPrayer = _prayerHabits.contains(habit);
+      bool isDisabled = !isPrayer && isWeekend;
+      
+      if (!isDisabled) {
+        total++;
+      }
+    }
+    return total;
   }
 
   Widget _buildDailyScoreCard(int current, int max, double percentage) {

@@ -1346,6 +1346,272 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               child: _buildYourProgressSection(todayIndex, currentScore),
             ),
           ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: _buildInsightsSection(todayIndex),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInsightsSection(int dayIndex) {
+    return Container(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'INSIGHTS',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildActivityRingsWidget(dayIndex),
+          const SizedBox(height: 24),
+          _buildWeeklyStreakCard(),
+          const SizedBox(height: 24),
+          _buildQuickStatsCard(dayIndex),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityRingsWidget(int dayIndex) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            'ACTIVITY RINGS',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.6),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 160,
+            width: 160,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 70,
+                    strokeWidth: 10,
+                    progress: _getCategoryProgress('Deen', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFFFF453A), // Red ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 55,
+                    strokeWidth: 10,
+                    progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF30D158), // Green ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 40,
+                    strokeWidth: 10,
+                    progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF00C7BE), // Cyan ring
+                  ),
+                ),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '${_getDailyScore(dayIndex)}',
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    Text(
+                      'POINTS',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.7),
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeeklyStreakCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF9F0A),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'WEEKLY STREAK',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.9),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '7',
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            'Days in a row',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStatsCard(int dayIndex) {
+    int totalCompleted = 0;
+    int totalHabits = 0;
+    
+    for (var category in _categories.entries) {
+      for (String habit in category.value) {
+        if (!_isHabitDisabled(habit, dayIndex)) {
+          totalHabits++;
+          HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+          if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+            totalCompleted++;
+          }
+        }
+      }
+    }
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TODAY\'S STATS',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.6),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$totalCompleted',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Completed',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$totalHabits',
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Total',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ],
       ),
     );

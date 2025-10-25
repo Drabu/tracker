@@ -65,8 +65,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   
   late AnimationController _progressAnimationController;
   late AnimationController _ringAnimationController;
+  late AnimationController _compoundProgressAnimationController;
+  late AnimationController _categoryProgressAnimationController;
   late Animation<double> _progressAnimation;
   late Animation<double> _ringAnimation;
+  late Animation<double> _compoundProgressAnimation;
+  late Animation<double> _categoryProgressAnimation;
   
   Timer? _dayUpdateTimer;
   Timer? _screenKeepAliveTimer;
@@ -207,7 +211,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         _timeData[habit]![_currentWeekKey] ??= {};
                         _timeData[habit]![_currentWeekKey]![dayIndex] = selectedTime;
                       });
-                      _animateProgressUpdate();
+                      _animateSpecificProgress(habit);
                       _saveData(); // Save data after changes
                     }
                   } else {
@@ -221,7 +225,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         _timeData[habit]![_currentWeekKey]![dayIndex] = null;
                       }
                     });
-                    _animateProgressUpdate();
+                    _animateSpecificProgress(habit);
                     _saveData(); // Save data after changes
                   }
                   if (mounted) Navigator.of(context).pop();
@@ -443,6 +447,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       vsync: this,
     );
     
+    _compoundProgressAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
+    _categoryProgressAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    
     _progressAnimation = Tween<double>(
       begin: 0.0,
       end: 1.0,
@@ -459,6 +473,22 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       curve: Curves.easeInOutQuart,
     ));
     
+    _compoundProgressAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _compoundProgressAnimationController,
+      curve: Curves.easeInOutCubic,
+    ));
+    
+    _categoryProgressAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _categoryProgressAnimationController,
+      curve: Curves.easeInOutCubic,
+    ));
+    
     // Enable wake lock to keep screen on
     _enableWakeLock();
     
@@ -471,6 +501,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         setState(() {});
         _progressAnimationController.forward();
         _ringAnimationController.forward();
+        _compoundProgressAnimationController.forward();
+        _categoryProgressAnimationController.forward();
       }
     });
   }
@@ -481,6 +513,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _screenKeepAliveTimer?.cancel();
     _progressAnimationController.dispose();
     _ringAnimationController.dispose();
+    _compoundProgressAnimationController.dispose();
+    _categoryProgressAnimationController.dispose();
     _disableWakeLock();
     super.dispose();
   }
@@ -490,6 +524,26 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _ringAnimationController.reset();
     _progressAnimationController.forward();
     _ringAnimationController.forward();
+  }
+
+  void _animateSpecificProgress(String habitName) {
+    // Determine which progress sections need to update based on the habit
+    bool updateCompound = _compoundingHabits.contains(habitName);
+    bool updateCategory = true; // Categories always update since every habit belongs to one
+    
+    if (updateCompound) {
+      _compoundProgressAnimationController.reset();
+      _compoundProgressAnimationController.forward();
+    }
+    
+    if (updateCategory) {
+      _categoryProgressAnimationController.reset();
+      _categoryProgressAnimationController.forward();
+    }
+    
+    // Always update the main progress (points display)
+    _progressAnimationController.reset();
+    _progressAnimationController.forward();
   }
 
   Future<void> _enableWakeLock() async {
@@ -1514,9 +1568,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               color: Colors.white.withValues(alpha: 0.1),
             ),
             child: AnimatedBuilder(
-              animation: _progressAnimation,
+              animation: _compoundProgressAnimation,
               builder: (context, child) => FractionallySizedBox(
-                widthFactor: progress * _progressAnimation.value,
+                widthFactor: progress * _compoundProgressAnimation.value,
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(4),
@@ -1690,9 +1744,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               color: Colors.white.withValues(alpha: 0.1),
             ),
             child: AnimatedBuilder(
-              animation: _progressAnimation,
+              animation: _categoryProgressAnimation,
               builder: (context, child) => FractionallySizedBox(
-                widthFactor: progress * _progressAnimation.value,
+                widthFactor: progress * _categoryProgressAnimation.value,
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(3),

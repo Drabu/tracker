@@ -1343,14 +1343,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Expanded(
             flex: 3,
             child: SingleChildScrollView(
-              child: _buildYourProgressSection(todayIndex, currentScore),
+              child: _buildInsightsSection(todayIndex),
             ),
           ),
           const SizedBox(width: 24),
           Expanded(
             flex: 3,
             child: SingleChildScrollView(
-              child: _buildInsightsSection(todayIndex),
+              child: _buildYourProgressSection(todayIndex, currentScore),
             ),
           ),
         ],

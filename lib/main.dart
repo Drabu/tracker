@@ -1218,30 +1218,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildTodaysFocusSection(int dayIndex) {
     final focusCategories = [
-      {
-        'name': 'Deen', 
-        'color': const Color(0xFFFF453A),
-        'tasks': [
-          'Read Quran for 15 min',
-          'Dhikr & Istighfar',
-        ]
-      },
-      {
-        'name': 'Personal', 
-        'color': const Color(0xFF30D158),
-        'tasks': [
-          'Meditate (10 min)',
-          'Journal',
-        ]
-      },
-      {
-        'name': 'Professional', 
-        'color': const Color(0xFF007AFF),
-        'tasks': [
-          'Project Alpha update',
-          'Plan team meeting',
-        ]
-      },
+      {'name': 'Deen', 'color': const Color(0xFFFF453A)},
+      {'name': 'Personal', 'color': const Color(0xFF30D158)},
+      {'name': 'Professional', 'color': const Color(0xFF007AFF)},
+      {'name': 'Health', 'color': const Color(0xFF00C7BE)},
     ];
 
     return Container(
@@ -1262,7 +1242,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             _buildFocusCategoryCard(
               category['name'] as String,
               category['color'] as Color,
-              category['tasks'] as List<String>,
               dayIndex,
             )
           ),
@@ -1271,7 +1250,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  Widget _buildFocusCategoryCard(String categoryName, Color categoryColor, List<String> tasks, int dayIndex) {
+  Widget _buildFocusCategoryCard(String categoryName, Color categoryColor, int dayIndex) {
+    List<String> categoryHabits = _categories[categoryName] ?? [];
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    
+    // Filter habits for weekends
+    List<String> availableHabits = categoryHabits.where((habit) {
+      bool isPrayer = _prayerHabits.contains(habit);
+      return isPrayer || !isWeekend; // Show prayers always, others only on weekdays
+    }).toList();
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
@@ -1308,70 +1296,86 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ],
           ),
           const SizedBox(height: 16),
-          ...tasks.map((task) => _buildTaskItem(task, false)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                Icons.add,
-                color: Colors.white.withValues(alpha: 0.6),
-                size: 16,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Add Task',
+          if (availableHabits.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                isWeekend ? 'Weekend - most habits disabled' : 'No habits in this category',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontStyle: FontStyle.italic,
                 ),
               ),
-            ],
-          ),
+            )
+          else
+            ...availableHabits.map((habit) => _buildTaskItem(habit, dayIndex)),
         ],
       ),
     );
   }
 
-  Widget _buildTaskItem(String taskName, bool isCompleted) {
+  Widget _buildTaskItem(String habitName, int dayIndex) {
+    HabitState currentState = _trackingData[habitName]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    bool isCompleted = currentState == HabitState.completed || 
+                      currentState == HabitState.onTime || 
+                      currentState == HabitState.partial;
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           GestureDetector(
-            onTap: () {
-              // Toggle task completion
-            },
+            onTap: () => _showHabitStateDialog(habitName, dayIndex),
             child: Container(
               width: 20,
               height: 20,
               decoration: BoxDecoration(
-                color: isCompleted ? const Color(0xFF30D158) : Colors.transparent,
+                color: isCompleted ? _getStateColor(currentState) : Colors.transparent,
                 border: Border.all(
-                  color: isCompleted ? const Color(0xFF30D158) : Colors.white.withValues(alpha: 0.3),
+                  color: isCompleted ? _getStateColor(currentState) : Colors.white.withValues(alpha: 0.3),
                   width: 2,
                 ),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: isCompleted 
-                ? const Icon(Icons.check, color: Colors.white, size: 14)
+                ? _getStateIcon(currentState)
                 : null,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              taskName,
-              style: TextStyle(
-                fontSize: 16,
-                color: isCompleted 
-                  ? Colors.white.withValues(alpha: 0.6)
-                  : Colors.white,
-                decoration: isCompleted ? TextDecoration.lineThrough : null,
-                fontWeight: FontWeight.w400,
+            child: GestureDetector(
+              onTap: () => _showHabitStateDialog(habitName, dayIndex),
+              child: Text(
+                habitName,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isCompleted 
+                    ? Colors.white.withValues(alpha: 0.8)
+                    : Colors.white,
+                  decoration: isCompleted ? TextDecoration.lineThrough : null,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
           ),
+          if (currentState != HabitState.none)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: _getStateColor(currentState).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '+${_getHabitPoints(habitName, currentState, dayIndex)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _getStateColor(currentState),
+                ),
+              ),
+            ),
         ],
       ),
     );

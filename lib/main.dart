@@ -1343,14 +1343,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Expanded(
             flex: 3,
             child: SingleChildScrollView(
-              child: _buildInsightsSection(todayIndex),
+              child: _buildYourProgressSection(todayIndex, currentScore),
             ),
           ),
           const SizedBox(width: 24),
           Expanded(
             flex: 3,
             child: SingleChildScrollView(
-              child: _buildYourProgressSection(todayIndex, currentScore),
+              child: _buildInsightsSection(todayIndex, currentScore),
             ),
           ),
         ],
@@ -1358,7 +1358,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  Widget _buildInsightsSection(int dayIndex) {
+  Widget _buildInsightsSection(int dayIndex, int currentScore) {
     return Container(
       padding: const EdgeInsets.only(bottom: 24),
       child: Column(
@@ -1374,6 +1374,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
+          _buildProgressScoreCard(),
+          const SizedBox(height: 16),
+          _buildAppleFitnessStyleCard(dayIndex),
+          const SizedBox(height: 24),
           _buildActivityRingsWidget(dayIndex),
           const SizedBox(height: 24),
           _buildWeeklyStreakCard(),
@@ -1799,10 +1803,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
-          _buildProgressScoreCard(),
-          const SizedBox(height: 16),
-          _buildAppleFitnessStyleCard(dayIndex),
-          const SizedBox(height: 24),
           _buildCompoundHabitsProgressCard(dayIndex),
           const SizedBox(height: 24),
           _buildCategoryProgressSection(dayIndex),

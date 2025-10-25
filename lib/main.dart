@@ -583,64 +583,124 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               color: Colors.white,
               decoration: TextDecoration.none,
             ),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+            child: Padding(
+              padding: const EdgeInsets.all(40),
+              child: Row(
                 children: [
-                  // Large animated habit icon
-                  _buildLargeAnimatedIcon(todayIndex),
-                  const SizedBox(height: 40),
-                  
-                  // Current habit text
-                  Text(
-                    _getCurrentHabitInAction(todayIndex),
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w300,
-                      color: Colors.white,
-                      letterSpacing: 1.5,
+                  // Left side - Big animated icon
+                  Expanded(
+                    flex: 2,
+                    child: Center(
+                      child: _buildLargeAnimatedIcon(todayIndex),
                     ),
-                    textAlign: TextAlign.center,
                   ),
                   
-                  const SizedBox(height: 20),
+                  const SizedBox(width: 60),
                   
-                  // Large countdown timer
-                  _buildLargeCountdownTimer(),
-                  
-                  const SizedBox(height: 60),
-                  
-                  // Current time display
-                  StreamBuilder<DateTime>(
-                    stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
-                    builder: (context, snapshot) {
-                      final currentTime = snapshot.data ?? DateTime.now();
-                      final timeString = '${currentTime.hour.toString().padLeft(2, '0')}:${currentTime.minute.toString().padLeft(2, '0')}';
-                      
-                      return Text(
-                        timeString,
-                        style: const TextStyle(
-                          fontSize: 72,
-                          fontWeight: FontWeight.w100,
-                          color: Colors.white,
-                          letterSpacing: 4,
+                  // Right side - Details and next habit
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Current habit text
+                        Text(
+                          'CURRENT HABIT',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.6),
+                            letterSpacing: 2,
+                          ),
                         ),
-                      );
-                    },
-                  ),
-                  
-                  const SizedBox(height: 20),
-                  
-                  // Subtle hint to tap
-                  Opacity(
-                    opacity: 0.4,
-                    child: Text(
-                      'Tap anywhere to return',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withValues(alpha: 0.6),
-                        letterSpacing: 1,
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _getCurrentHabitInAction(todayIndex),
+                          style: const TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w300,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 40),
+                        
+                        // Current time display
+                        StreamBuilder<DateTime>(
+                          stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+                          builder: (context, snapshot) {
+                            final currentTime = snapshot.data ?? DateTime.now();
+                            final timeString = '${currentTime.hour.toString().padLeft(2, '0')}:${currentTime.minute.toString().padLeft(2, '0')}';
+                            
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'CURRENT TIME',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    letterSpacing: 2,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  timeString,
+                                  style: const TextStyle(
+                                    fontSize: 64,
+                                    fontWeight: FontWeight.w100,
+                                    color: Colors.white,
+                                    letterSpacing: 4,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                        
+                        const SizedBox(height: 40),
+                        
+                        // Countdown timer
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'TIME REMAINING',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withValues(alpha: 0.6),
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildLargeCountdownTimer(),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 40),
+                        
+                        // Next habit
+                        _buildNextHabitSection(todayIndex),
+                        
+                        const SizedBox(height: 60),
+                        
+                        // Subtle hint to tap
+                        Opacity(
+                          opacity: 0.4,
+                          child: Text(
+                            'Tap anywhere to return',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -650,6 +710,140 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         ),
       ),
     );
+  }
+
+  Widget _buildNextHabitSection(int dayIndex) {
+    DateTime now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
+    int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
+    
+    // Get next habit info
+    String nextHabitName = _getNextHabitName(nextTransitionMinutes);
+    IconData nextHabitIcon = _getNextHabitIcon(nextTransitionMinutes);
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'NEXT HABIT',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withValues(alpha: 0.6),
+            letterSpacing: 2,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: const Color(0xFF30D158),
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF30D158).withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                nextHabitIcon,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                nextHabitName,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String _getNextHabitName(int nextTransitionMinutes) {
+    // Convert back to hours and minutes for comparison
+    int hours = nextTransitionMinutes ~/ 60;
+    int minutes = nextTransitionMinutes % 60;
+    
+    // Handle next day case
+    if (hours >= 24) {
+      hours = hours % 24;
+    }
+    
+    // Map transition times to habit names
+    if (hours == 9 && minutes == 0) return "Cold shower";
+    if (hours == 9 && minutes == 40) return "Fajr Nimaz";
+    if (hours == 10 && minutes == 0) return "Quran";
+    if (hours == 10 && minutes == 30) return "Gym";
+    if (hours == 11 && minutes == 30) return "Breakfast";
+    if (hours == 12 && minutes == 0) return "Duhr";
+    if (hours == 12 && minutes == 30) return "Book Reading";
+    if (hours == 14 && minutes == 0) return "Lunch";
+    if (hours == 15 && minutes == 0) return "Asr";
+    if (hours == 15 && minutes == 30) return "Data Structures";
+    if (hours == 17 && minutes == 30) return "Typing";
+    if (hours == 18 && minutes == 30) return "Maghrib";
+    if (hours == 19 && minutes == 0) return "Guitar";
+    if (hours == 20 && minutes == 0) return "Dinner";
+    if (hours == 20 && minutes == 30) return "Isha";
+    if (hours == 21 && minutes == 0) return "Walk";
+    if (hours == 21 && minutes == 30) return "Evening Quran";
+    if (hours == 22 && minutes == 0) return "Water";
+    if (hours == 23 && minutes == 0) return "Book Reading";
+    if (hours == 1 && minutes == 0) return "Bed time";
+    if (hours == 2 && minutes == 0) return "Sleep time";
+    
+    return "Next activity";
+  }
+
+  IconData _getNextHabitIcon(int nextTransitionMinutes) {
+    // Convert back to hours and minutes for comparison
+    int hours = nextTransitionMinutes ~/ 60;
+    int minutes = nextTransitionMinutes % 60;
+    
+    // Handle next day case
+    if (hours >= 24) {
+      hours = hours % 24;
+    }
+    
+    // Map transition times to icons
+    if (hours == 9 && minutes == 0) return Icons.shower;
+    if (hours == 9 && minutes == 40) return Icons.mosque;
+    if (hours == 10 && minutes == 0) return Icons.menu_book;
+    if (hours == 10 && minutes == 30) return Icons.fitness_center;
+    if (hours == 11 && minutes == 30) return Icons.breakfast_dining;
+    if (hours == 12 && minutes == 0) return Icons.mosque;
+    if (hours == 12 && minutes == 30) return Icons.book;
+    if (hours == 14 && minutes == 0) return Icons.lunch_dining;
+    if (hours == 15 && minutes == 0) return Icons.mosque;
+    if (hours == 15 && minutes == 30) return Icons.code;
+    if (hours == 17 && minutes == 30) return Icons.keyboard;
+    if (hours == 18 && minutes == 30) return Icons.mosque;
+    if (hours == 19 && minutes == 0) return Icons.music_note;
+    if (hours == 20 && minutes == 0) return Icons.dinner_dining;
+    if (hours == 20 && minutes == 30) return Icons.mosque;
+    if (hours == 21 && minutes == 0) return Icons.directions_walk;
+    if (hours == 21 && minutes == 30) return Icons.menu_book;
+    if (hours == 22 && minutes == 0) return Icons.water_drop;
+    if (hours == 23 && minutes == 0) return Icons.book;
+    if (hours == 1 && minutes == 0) return Icons.bed;
+    if (hours == 2 && minutes == 0) return Icons.bedtime;
+    
+    return Icons.access_time;
   }
 
   Widget _buildLargeAnimatedIcon(int dayIndex) {

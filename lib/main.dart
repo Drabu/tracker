@@ -74,6 +74,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   
   Timer? _dayUpdateTimer;
   Timer? _screenKeepAliveTimer;
+  Timer? _idleTimer;
+  bool _isIdleMode = false;
+  DateTime _lastInteraction = DateTime.now();
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -398,13 +401,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   @override
   Widget build(BuildContext context) {
+    if (_isIdleMode) {
+      return _buildIdleScreensaver();
+    }
+    
     return GestureDetector(
-      onTap: () {
-        // Re-enable wake lock on user interaction (required by many browsers)
-        if (_currentView == ViewType.day) {
-          _tryWebWakeLock();
-        }
-      },
+      onTap: _onUserInteraction,
+      onPanDown: (_) => _onUserInteraction(),
+      onScaleStart: (_) => _onUserInteraction(),
       child: Scaffold(
         appBar: _buildAppBar(),
         body: _shouldShowContributionGraph()
@@ -503,12 +507,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _categoryProgressAnimationController.forward();
       }
     });
+    
+    // Set up idle mode timer
+    _setupIdleTimer();
   }
 
   @override
   void dispose() {
     _dayUpdateTimer?.cancel();
     _screenKeepAliveTimer?.cancel();
+    _idleTimer?.cancel();
     _progressAnimationController.dispose();
     _ringAnimationController.dispose();
     _compoundProgressAnimationController.dispose();
@@ -518,6 +526,228 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _categoryProgressNotifier.dispose();
     _disableWakeLock();
     super.dispose();
+  }
+
+  void _setupIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (DateTime.now().difference(_lastInteraction).inSeconds >= 30) { // 30 seconds idle
+        if (!_isIdleMode) {
+          setState(() {
+            _isIdleMode = true;
+          });
+        }
+      }
+    });
+  }
+
+  void _onUserInteraction() {
+    _lastInteraction = DateTime.now();
+    
+    if (_isIdleMode) {
+      setState(() {
+        _isIdleMode = false;
+      });
+    }
+    
+    // Re-enable wake lock on user interaction (required by many browsers)
+    if (_currentView == ViewType.day) {
+      _tryWebWakeLock();
+    }
+    
+    _setupIdleTimer(); // Reset the timer
+  }
+
+  Widget _buildIdleScreensaver() {
+    DateTime now = DateTime.now();
+    int todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
+    
+    return GestureDetector(
+      onTap: _onUserInteraction,
+      onPanDown: (_) => _onUserInteraction(),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF0D1117),
+              const Color(0xFF161B22),
+              const Color(0xFF21262D),
+            ],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Large animated habit icon
+              _buildLargeAnimatedIcon(todayIndex),
+              const SizedBox(height: 40),
+              
+              // Current habit text
+              Text(
+                _getCurrentHabitInAction(todayIndex),
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w300,
+                  color: Colors.white,
+                  letterSpacing: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Large countdown timer
+              _buildLargeCountdownTimer(),
+              
+              const SizedBox(height: 60),
+              
+              // Current time display
+              StreamBuilder<DateTime>(
+                stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+                builder: (context, snapshot) {
+                  final currentTime = snapshot.data ?? DateTime.now();
+                  final timeString = '${currentTime.hour.toString().padLeft(2, '0')}:${currentTime.minute.toString().padLeft(2, '0')}';
+                  
+                  return Text(
+                    timeString,
+                    style: const TextStyle(
+                      fontSize: 72,
+                      fontWeight: FontWeight.w100,
+                      color: Colors.white,
+                      letterSpacing: 4,
+                    ),
+                  );
+                },
+              ),
+              
+              const SizedBox(height: 20),
+              
+              // Subtle hint to tap
+              Opacity(
+                opacity: 0.4,
+                child: Text(
+                  'Tap anywhere to return',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLargeAnimatedIcon(int dayIndex) {
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(milliseconds: 50), (_) => DateTime.now()),
+      builder: (context, snapshot) {
+        final now = snapshot.data ?? DateTime.now();
+        final time = now.millisecondsSinceEpoch / 1000.0;
+        
+        // Slower, more elegant animations for screensaver
+        final pulseScale = 0.9 + 0.2 * math.sin(time * 1.2);
+        final rotationAngle = math.sin(time * 0.3) * 0.03;
+        final glowIntensity = 0.4 + 0.3 * math.sin(time * 1.8);
+        
+        return Transform.scale(
+          scale: pulseScale,
+          child: Transform.rotate(
+            angle: rotationAngle,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF00C7BE),
+                    const Color(0xFF30D158),
+                    const Color(0xFF007AFF),
+                    const Color(0xFFFF9F0A),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  transform: GradientRotation(time * 0.2),
+                ),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00C7BE).withValues(alpha: glowIntensity),
+                    blurRadius: 30,
+                    spreadRadius: 10,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF30D158).withValues(alpha: glowIntensity * 0.8),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: Icon(
+                _getHabitIcon(dayIndex),
+                color: Colors.white,
+                size: 60,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLargeCountdownTimer() {
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      builder: (context, snapshot) {
+        final now = snapshot.data ?? DateTime.now();
+        final currentMinutes = now.hour * 60 + now.minute;
+        final currentSeconds = now.second;
+        
+        int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
+        int remainingMinutes = nextTransitionMinutes - currentMinutes;
+        int remainingSeconds = 60 - currentSeconds;
+        
+        if (remainingSeconds == 60) {
+          remainingSeconds = 0;
+        } else {
+          remainingMinutes -= 1;
+        }
+        
+        if (remainingMinutes < 0) {
+          remainingMinutes += 1440;
+        }
+        
+        int hours = remainingMinutes ~/ 60;
+        int minutes = remainingMinutes % 60;
+        
+        String timeString;
+        Color timeColor;
+        
+        if (hours > 0) {
+          timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeColor = Colors.white;
+        } else {
+          timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeColor = minutes <= 5 ? const Color(0xFFFF9F0A) : Colors.white;
+        }
+        
+        return Text(
+          timeString,
+          style: TextStyle(
+            fontSize: 48,
+            fontWeight: FontWeight.w200,
+            color: timeColor,
+            letterSpacing: 3,
+          ),
+        );
+      },
+    );
   }
 
   void _animateProgressUpdate() {

@@ -1380,7 +1380,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 24),
           _buildWeeklyStreakCard(),
           const SizedBox(height: 24),
-          _buildQuickStatsCard(dayIndex),
         ],
       ),
     );
@@ -1581,15 +1580,34 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildWeeklyStreakCard() {
+    int bestDailyScore = _getBestDailyScore();
+    int todayScore = _getDailyScore(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
+    bool achievedBest = todayScore >= bestDailyScore && todayScore > 0;
+    int perfectDays = _getPerfectDaysCount();
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.85),
+          ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1597,49 +1615,318 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Row(
             children: [
               Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF9F0A),
-                  shape: BoxShape.circle,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFD700), Color(0xFFFF9F0A)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  achievedBest ? Icons.emoji_events : Icons.workspace_premium,
+                  color: Colors.white,
+                  size: 16,
                 ),
               ),
               const SizedBox(width: 12),
               Text(
-                'WEEKLY STREAK',
+                'PERSONAL RECORDS',
                 style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.9),
-                  letterSpacing: 0.5,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              if (achievedBest)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    'NEW RECORD!',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFFFD700),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _buildRecordItem(
+                  value: bestDailyScore,
+                  label: 'BEST DAILY SCORE',
+                  icon: Icons.star,
+                  color: const Color(0xFFFFD700),
+                  isHighlighted: achievedBest,
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildRecordItem(
+                  value: perfectDays,
+                  label: 'PERFECT DAYS',
+                  icon: Icons.grade,
+                  color: const Color(0xFF30D158),
+                  isHighlighted: false,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            '7',
-            style: const TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+          const SizedBox(height: 20),
+          if (achievedBest)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFFFD700).withValues(alpha: 0.1),
+                    const Color(0xFFFF9F0A).withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(seconds: 2),
+                    tween: Tween(begin: 0.8, end: 1.2),
+                    curve: Curves.elasticOut,
+                    builder: (context, scale, child) => Transform.scale(
+                      scale: scale,
+                      child: Icon(
+                        Icons.celebration,
+                        color: const Color(0xFFFFD700),
+                        size: 24,
+                      ),
+                    ),
+                    onEnd: () => setState(() {}),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Congratulations!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFFFD700),
+                          ),
+                        ),
+                        Text(
+                          'You achieved your personal best today!',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
+          if (!achievedBest && bestDailyScore > 0)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF007AFF).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF007AFF).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.trending_up,
+                    color: const Color(0xFF007AFF),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Beat your record!',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF007AFF),
+                          ),
+                        ),
+                        Text(
+                          'You need ${bestDailyScore - todayScore + 1} more points',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordItem({
+    required int value,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool isHighlighted,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isHighlighted 
+          ? color.withValues(alpha: 0.15)
+          : color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isHighlighted 
+            ? color.withValues(alpha: 0.4)
+            : color.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: color,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 1000),
+                tween: Tween(begin: 0, end: value.toDouble()),
+                builder: (context, animatedValue, child) => Text(
+                  '${animatedValue.toInt()}',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 4),
           Text(
-            'Days in a row',
+            label,
             style: TextStyle(
-              fontSize: 12,
-              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: color.withValues(alpha: 0.8),
+              letterSpacing: 0.5,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
+  int _getBestDailyScore() {
+    int bestScore = 0;
+    
+    // Check all weeks and days in tracking data
+    for (var weekData in _trackingData.values) {
+      for (var week in weekData.values) {
+        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+          int dayScore = 0;
+          
+          for (var category in _categories.entries) {
+            for (String habit in category.value) {
+              if (!_isHabitDisabled(habit, dayIndex)) {
+                HabitState? state = week[dayIndex];
+                if (state != null) {
+                  int points = _getHabitPoints(habit, state, dayIndex);
+                  dayScore += points;
+                }
+              }
+            }
+          }
+          
+          if (dayScore > bestScore) {
+            bestScore = dayScore;
+          }
+        }
+      }
+    }
+    
+    return bestScore;
+  }
+
+  int _getPerfectDaysCount() {
+    int perfectDays = 0;
+    
+    // Check all weeks and days in tracking data
+    for (var weekData in _trackingData.values) {
+      for (var week in weekData.values) {
+        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+          int totalHabits = 0;
+          int completedHabits = 0;
+          
+          for (var category in _categories.entries) {
+            for (String habit in category.value) {
+              if (!_isHabitDisabled(habit, dayIndex)) {
+                totalHabits++;
+                HabitState? state = week[dayIndex];
+                if (state == HabitState.completed || state == HabitState.onTime) {
+                  completedHabits++;
+                }
+              }
+            }
+          }
+          
+          if (totalHabits > 0 && completedHabits == totalHabits) {
+            perfectDays++;
+          }
+        }
+      }
+    }
+    
+    return perfectDays;
+  }
+
   Widget _buildQuickStatsCard(int dayIndex) {
     int totalCompleted = 0;
     int totalHabits = 0;
+    int onTimeHabits = 0;
+    int partialHabits = 0;
     
     for (var category in _categories.entries) {
       for (String habit in category.value) {
@@ -1648,78 +1935,259 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
           if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
             totalCompleted++;
+            if (state == HabitState.onTime) onTimeHabits++;
+            if (state == HabitState.partial) partialHabits++;
           }
         }
       }
     }
     
+    double completionRate = totalHabits > 0 ? totalCompleted / totalHabits : 0.0;
+    
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.85),
+          ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'TODAY\'S STATS',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.6),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 16),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$totalCompleted',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    'Completed',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                  ),
-                ],
+              Text(
+                'TODAY\'S PERFORMANCE',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  letterSpacing: 0.8,
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '$totalHabits',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: completionRate >= 0.8 
+                    ? const Color(0xFF30D158).withValues(alpha: 0.2)
+                    : completionRate >= 0.5
+                      ? const Color(0xFFFF9F0A).withValues(alpha: 0.2)
+                      : const Color(0xFFFF453A).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: completionRate >= 0.8 
+                      ? const Color(0xFF30D158).withValues(alpha: 0.4)
+                      : completionRate >= 0.5
+                        ? const Color(0xFFFF9F0A).withValues(alpha: 0.4)
+                        : const Color(0xFFFF453A).withValues(alpha: 0.4),
                   ),
-                  Text(
-                    'Total',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
+                ),
+                child: Text(
+                  completionRate >= 0.8 ? 'EXCELLENT' 
+                    : completionRate >= 0.5 ? 'GOOD' : 'FOCUS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: completionRate >= 0.8 
+                      ? const Color(0xFF30D158)
+                      : completionRate >= 0.5
+                        ? const Color(0xFFFF9F0A)
+                        : const Color(0xFFFF453A),
+                    letterSpacing: 0.5,
                   ),
-                ],
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 24),
+          // Main completion stats
+          Row(
+            children: [
+              Expanded(
+                child: _buildStatItem(
+                  value: totalCompleted,
+                  label: 'COMPLETED',
+                  color: const Color(0xFF30D158),
+                  icon: Icons.check_circle,
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildStatItem(
+                  value: totalHabits - totalCompleted,
+                  label: 'REMAINING',
+                  color: const Color(0xFFFF9F0A),
+                  icon: Icons.pending_actions,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Completion rate indicator
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        TweenAnimationBuilder<double>(
+                          duration: const Duration(milliseconds: 1000),
+                          tween: Tween(begin: 0, end: completionRate * 100),
+                          builder: (context, animatedRate, child) => Text(
+                            '${animatedRate.toInt()}%',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        TweenAnimationBuilder<double>(
+                          duration: const Duration(seconds: 2),
+                          tween: Tween(begin: 0.7, end: 1.0),
+                          curve: Curves.easeInOut,
+                          builder: (context, scale, child) => Transform.scale(
+                            scale: scale,
+                            child: Icon(
+                              completionRate >= 0.8 ? Icons.celebration : Icons.trending_up,
+                              color: completionRate >= 0.8 ? const Color(0xFFFFD700) : const Color(0xFF00C7BE),
+                              size: 20,
+                            ),
+                          ),
+                          onEnd: () => setState(() {}),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'COMPLETION RATE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 20),
+              // Progress bar
+              Expanded(
+                child: Column(
+                  children: [
+                    Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: TweenAnimationBuilder<double>(
+                        duration: const Duration(milliseconds: 1200),
+                        tween: Tween(begin: 0, end: completionRate),
+                        builder: (context, animatedProgress, child) => LinearProgressIndicator(
+                          value: animatedProgress,
+                          backgroundColor: Colors.transparent,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            completionRate >= 0.8 
+                              ? const Color(0xFF30D158)
+                              : completionRate >= 0.5
+                                ? const Color(0xFFFF9F0A)
+                                : const Color(0xFFFF453A),
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$totalCompleted of $totalHabits habits',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem({
+    required int value,
+    required String label,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: color,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 800),
+                tween: Tween(begin: 0, end: value.toDouble()),
+                builder: (context, animatedValue, child) => Text(
+                  '${animatedValue.toInt()}',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color.withValues(alpha: 0.8),
+              letterSpacing: 0.5,
+            ),
           ),
         ],
       ),
@@ -1750,6 +2218,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
+          _buildQuickStatsCard(dayIndex),
+          const SizedBox(height: 24),
           ...focusCategories.map((category) => 
             _buildFocusCategoryCard(
               category['name'] as String,

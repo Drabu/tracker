@@ -1534,6 +1534,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
           const SizedBox(height: 16),
           _buildProgressScoreCard(),
+          const SizedBox(height: 16),
+          _buildAppleFitnessStyleCard(dayIndex),
           const SizedBox(height: 24),
           _buildCompoundHabitsProgressCard(dayIndex),
           const SizedBox(height: 24),
@@ -1744,11 +1746,62 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               color: Colors.white.withValues(alpha: 0.4),
             ),
           ),
-          const SizedBox(height: 12),
-          _buildRealtimeClock(),
         ],
       ),
     ),
+    );
+  }
+
+  Widget _buildAppleFitnessStyleCard(int dayIndex) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          // Apple Fitness-style icon
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF00C7BE), Color(0xFF30D158)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.track_changes,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildRealtimeClock(),
+                const SizedBox(height: 4),
+                Text(
+                  _getCurrentHabitInAction(dayIndex),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1759,28 +1812,43 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         final now = snapshot.data ?? DateTime.now();
         final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
         
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.access_time,
-              size: 16,
-              color: Colors.white.withValues(alpha: 0.6),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              timeString,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.8),
-                letterSpacing: 1,
-              ),
-            ),
-          ],
+        return Text(
+          timeString,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            letterSpacing: 1,
+          ),
         );
       },
     );
+  }
+
+  String _getCurrentHabitInAction(int dayIndex) {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    
+    // Determine current habit based on time of day
+    if (currentHour >= 5 && currentHour < 7) {
+      return "Time for Fajr Prayer";
+    } else if (currentHour >= 7 && currentHour < 9) {
+      return "Morning routine active";
+    } else if (currentHour >= 12 && currentHour < 14) {
+      return "Time for Duhr Prayer";
+    } else if (currentHour >= 15 && currentHour < 17) {
+      return "Time for Asr Prayer";
+    } else if (currentHour >= 17 && currentHour < 19) {
+      return "Time for Maghrib Prayer";
+    } else if (currentHour >= 19 && currentHour < 21) {
+      return "Time for Isha Prayer";
+    } else if (currentHour >= 21 && currentHour < 23) {
+      return "Evening activities";
+    } else if (currentHour >= 23 || currentHour < 5) {
+      return "Sleep time approaching";
+    } else {
+      return "Keep up the great work!";
+    }
   }
 
   Widget _buildCategoryProgressSection(int dayIndex) {

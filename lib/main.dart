@@ -79,6 +79,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<double> _compoundProgressNotifier = ValueNotifier<double>(0.0);
   final ValueNotifier<Map<String, double>> _categoryProgressNotifier = ValueNotifier<Map<String, double>>({});
+  final ValueNotifier<int> _habitGridUpdateNotifier = ValueNotifier<int>(0);
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -516,6 +517,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _pointsNotifier.dispose();
     _compoundProgressNotifier.dispose();
     _categoryProgressNotifier.dispose();
+    _habitGridUpdateNotifier.dispose();
     _disableWakeLock();
     super.dispose();
   }
@@ -554,10 +556,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     int currentDayIndex = DateTime.now().weekday - 1;
     _pointsNotifier.value = _getDailyScore(currentDayIndex);
     
-    // Update compound progress if this habit is compounding
-    if (_compoundingHabits.contains(habit)) {
-      _compoundProgressNotifier.value = _getCompoundProgress(currentDayIndex);
-    }
+    // Always update compound progress (even if this specific habit isn't compounding,
+    // the overall count affects the percentage)
+    _compoundProgressNotifier.value = _getCompoundProgress(currentDayIndex);
     
     // Update category progress for all categories (since we don't know which category changed)
     Map<String, double> categoryProgress = {};
@@ -565,6 +566,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       categoryProgress[categoryName] = _getCategoryProgress(categoryName, currentDayIndex);
     }
     _categoryProgressNotifier.value = categoryProgress;
+    
+    // Trigger habit grid update
+    _habitGridUpdateNotifier.value = _habitGridUpdateNotifier.value + 1;
   }
 
   double _getCompoundProgress(int dayIndex) {
@@ -1558,7 +1562,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           }
         }
         
-        progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+        // Use the progress from the notifier
     
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1968,7 +1972,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
-          ...habits.map((habit) => _buildDailyHabitItem(habit, dayIndex)),
+          ...habits.map((habit) => ValueListenableBuilder<int>(
+            valueListenable: _habitGridUpdateNotifier,
+            builder: (context, _, child) => _buildDailyHabitItem(habit, dayIndex),
+          )),
         ],
       ),
     );
@@ -2227,7 +2234,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
-          _buildWeekHabitGrid(habits),
+          ValueListenableBuilder<int>(
+            valueListenable: _habitGridUpdateNotifier,
+            builder: (context, _, child) => _buildWeekHabitGrid(habits),
+          ),
         ],
       ),
     );
@@ -2506,7 +2516,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
             const SizedBox(height: 16),
-            _buildHabitGrid(habits),
+            ValueListenableBuilder<int>(
+              valueListenable: _habitGridUpdateNotifier,
+              builder: (context, _, child) => _buildHabitGrid(habits),
+            ),
           ],
         ),
       ),
@@ -3141,7 +3154,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
-          ...habits.map((habit) => _buildAppleStyleHabitItem(habit, dayIndex)),
+          ...habits.map((habit) => ValueListenableBuilder<int>(
+            valueListenable: _habitGridUpdateNotifier,
+            builder: (context, _, child) => _buildAppleStyleHabitItem(habit, dayIndex),
+          )),
           const SizedBox(height: 8),
         ],
       ),

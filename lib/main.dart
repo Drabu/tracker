@@ -1744,9 +1744,42 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               color: Colors.white.withValues(alpha: 0.4),
             ),
           ),
+          const SizedBox(height: 12),
+          _buildRealtimeClock(),
         ],
       ),
     ),
+    );
+  }
+
+  Widget _buildRealtimeClock() {
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      builder: (context, snapshot) {
+        final now = snapshot.data ?? DateTime.now();
+        final timeString = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+        
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.access_time,
+              size: 16,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              timeString,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.8),
+                letterSpacing: 1,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

@@ -1401,10 +1401,168 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 16),
           _buildProgressScoreCard(currentScore),
           const SizedBox(height: 24),
+          _buildCompoundHabitsProgressCard(dayIndex),
+          const SizedBox(height: 24),
           _buildCategoryProgressSection(dayIndex),
         ],
       ),
     );
+  }
+
+  Widget _buildCompoundHabitsProgressCard(int dayIndex) {
+    List<String> compoundHabits = _compoundingHabits.toList();
+    int completedCount = 0;
+    int totalCount = 0;
+    
+    for (String habit in compoundHabits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        totalCount++;
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+          completedCount++;
+        }
+      }
+    }
+    
+    double progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFF9F0A), // Orange for compound habits
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'COMPOUND HABITS',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF9F0A).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: const Color(0xFFFF9F0A).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Text(
+                  '${(progress * 100).toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFFF9F0A),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Long-term growth habits that compound over time',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$completedCount of $totalCount completed',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            child: AnimatedBuilder(
+              animation: _progressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: progress * _progressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9F0A), Color(0xFFFF6B35)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (totalCount > 0) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Today: ${_getCompoundHabitsNames(dayIndex, completedCount)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _getCompoundHabitsNames(int dayIndex, int completedCount) {
+    List<String> completedHabits = [];
+    List<String> compoundHabits = _compoundingHabits.toList();
+    
+    for (String habit in compoundHabits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+          completedHabits.add(habit);
+        }
+      }
+    }
+    
+    if (completedHabits.isEmpty) {
+      return "None completed yet";
+    } else if (completedHabits.length <= 3) {
+      return completedHabits.join(", ");
+    } else {
+      return "${completedHabits.take(3).join(", ")} +${completedHabits.length - 3} more";
+    }
   }
 
   Widget _buildProgressScoreCard(int currentScore) {

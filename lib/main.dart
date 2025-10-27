@@ -3556,24 +3556,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getNextTransitionTime(int currentMinutes) {
     // Define all transition times in minutes from midnight
     final transitions = [
-      120,  // 2:00 AM (end of book reading, start sleep)
-      540,  // 9:00 AM (end of sleep, start morning routine)
-      550,  // 9:10 AM (cold shower to fajr prayer)
-      570,  // 9:30 AM (fajr prayer to quran)
-      580,  // 9:40 AM (end morning routine, start breakfast)
-      630,  // 10:30 AM (end breakfast, start work session 1)
-      720,  // 12:00 PM (end work session 1, start break)
-      740,  // 12:20 PM (end break, start work session 2)
-      810,  // 1:30 PM (end work session 2, start zuhar prayer)
-      840,  // 2:00 PM (end zuhar prayer, start lunch)
-      870,  // 2:30 PM (end lunch, start work session 3)
-      1050, // 4:30 PM (end work session 3, start asr prayer)
-      1065, // 4:45 PM (end asr prayer break)
-      1080, // 5:00 PM (start work session 4)
-      1140, // 6:00 PM (end work session 4, start maghrib prayer)
-      1230, // 7:30 PM (end maghrib prayer, start gym)
-      1320, // 9:00 PM (end gym, start isha prayer)
-      1380, // 11:00 PM (end isha prayer, start book reading)
+      120,  // 2:00 AM (end quiet growth hours, start sleep)
+      540,  // 9:00 AM (end sleep, start morning reset)
+      570,  // 9:30 AM (end morning reset, start spiritual start)
+      585,  // 9:45 AM (end spiritual start, start energize & nourish)
+      630,  // 10:30 AM (end energize & nourish, start deep focus 1)
+      720,  // 12:00 PM (end deep focus 1, start creative recharge)
+      740,  // 12:20 PM (end creative recharge, start deep focus 2)
+      810,  // 1:30 PM (end deep focus 2, start midday prayer pause)
+      825,  // 1:45 PM (end midday prayer pause, start fuel & rest)
+      870,  // 2:30 PM (end fuel & rest, start deep focus 3)
+      960,  // 4:00 PM (end deep focus 3, start reset minute)
+      975,  // 4:15 PM (end reset minute, start deep focus 4)
+      1050, // 5:30 PM (end deep focus 4, start evening prayer pause)
+      1080, // 6:00 PM (end evening prayer pause, start unwind & reflect)
+      1200, // 8:00 PM (end unwind & reflect, start physical power hour)
+      1260, // 9:00 PM (end physical power hour, start family & fuel time)
+      1380, // 11:00 PM (end family & fuel time, start quiet growth hours)
     ];
     
     // Find the next transition after current time
@@ -3590,24 +3589,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getCurrentActivityStartTime(int currentMinutes) {
     // Define all transition times in minutes from midnight
     final transitions = [
-      120,  // 2:00 AM (end of book reading, start sleep)
-      540,  // 9:00 AM (end of sleep, start morning routine)
-      550,  // 9:10 AM (cold shower to fajr prayer)
-      570,  // 9:30 AM (fajr prayer to quran)
-      580,  // 9:40 AM (end morning routine, start breakfast)
-      630,  // 10:30 AM (end breakfast, start work session 1)
-      720,  // 12:00 PM (end work session 1, start break)
-      740,  // 12:20 PM (end break, start work session 2)
-      810,  // 1:30 PM (end work session 2, start zuhar prayer)
-      840,  // 2:00 PM (end zuhar prayer, start lunch)
-      870,  // 2:30 PM (end lunch, start work session 3)
-      1050, // 4:30 PM (end work session 3, start asr prayer)
-      1065, // 4:45 PM (end asr prayer break)
-      1080, // 5:00 PM (start work session 4)
-      1140, // 6:00 PM (end work session 4, start maghrib prayer)
-      1230, // 7:30 PM (end maghrib prayer, start gym)
-      1320, // 9:00 PM (end gym, start isha prayer)
-      1380, // 11:00 PM (end isha prayer, start book reading)
+      120,  // 2:00 AM (end quiet growth hours, start sleep)
+      540,  // 9:00 AM (end sleep, start morning reset)
+      570,  // 9:30 AM (end morning reset, start spiritual start)
+      585,  // 9:45 AM (end spiritual start, start energize & nourish)
+      630,  // 10:30 AM (end energize & nourish, start deep focus 1)
+      720,  // 12:00 PM (end deep focus 1, start creative recharge)
+      740,  // 12:20 PM (end creative recharge, start deep focus 2)
+      810,  // 1:30 PM (end deep focus 2, start midday prayer pause)
+      825,  // 1:45 PM (end midday prayer pause, start fuel & rest)
+      870,  // 2:30 PM (end fuel & rest, start deep focus 3)
+      960,  // 4:00 PM (end deep focus 3, start reset minute)
+      975,  // 4:15 PM (end reset minute, start deep focus 4)
+      1050, // 5:30 PM (end deep focus 4, start evening prayer pause)
+      1080, // 6:00 PM (end evening prayer pause, start unwind & reflect)
+      1200, // 8:00 PM (end unwind & reflect, start physical power hour)
+      1260, // 9:00 PM (end physical power hour, start family & fuel time)
+      1380, // 11:00 PM (end family & fuel time, start quiet growth hours)
     ];
     
     // Find the last transition before or at current time
@@ -3623,7 +3621,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     
     // Handle the case where we're before the first transition (in sleep period)
     if (currentMinutes < 120) {
-      activityStart = 1380; // 11:00 PM previous day (start of book reading)
+      activityStart = 1380; // 11:00 PM previous day (start of quiet growth hours)
     }
     
     return activityStart;
@@ -3732,72 +3730,73 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     final currentMinute = now.minute;
     final totalMinutes = currentHour * 60 + currentMinute;
     
-    // Schedule starts at 9:00 AM (540 minutes from midnight)
-    // 9:00 - 9:40 AM: Morning routine (Cold shower, Fajr Prayer, Quran)
-    if (totalMinutes >= 540 && totalMinutes < 580) {
-      if (totalMinutes < 550) {
-        return "Cold Shower in progress";
-      } else if (totalMinutes < 570) {
-        return "Fajr Prayer time";
-      } else {
-        return "Quran reading session";
-      }
+    // 9:00 – 9:30 AM — Morning Reset (540-570 minutes)
+    if (totalMinutes >= 540 && totalMinutes < 570) {
+      return "Morning Reset";
     }
-    // 9:40 - 10:30 AM: Breakfast
-    else if (totalMinutes >= 580 && totalMinutes < 630) {
-      return "Breakfast time";
+    // 9:30 – 9:45 AM — Spiritual Start (570-585 minutes)
+    else if (totalMinutes >= 570 && totalMinutes < 585) {
+      return "Spiritual Start";
     }
-    // 10:30 AM - 12:00 PM: Work Session 1
+    // 9:45 – 10:30 AM — Energize & Nourish (585-630 minutes)
+    else if (totalMinutes >= 585 && totalMinutes < 630) {
+      return "Energize & Nourish";
+    }
+    // 10:30 – 12:00 PM — Deep Focus 1 (630-720 minutes)
     else if (totalMinutes >= 630 && totalMinutes < 720) {
-      return "Work Session 1 in progress";
+      return "Deep Focus 1";
     }
-    // 12:00 - 12:20 PM: Break
+    // 12:00 – 12:20 PM — Creative Recharge (720-740 minutes)
     else if (totalMinutes >= 720 && totalMinutes < 740) {
-      return "Break time - recharge yourself";
+      return "Creative Recharge";
     }
-    // 12:20 - 1:30 PM: Work Session 2
+    // 12:20 – 1:30 PM — Deep Focus 2 (740-810 minutes)
     else if (totalMinutes >= 740 && totalMinutes < 810) {
-      return "Work Session 2 in progress";
+      return "Deep Focus 2";
     }
-    // 1:30 - 2:00 PM: Zuhar Prayer
-    else if (totalMinutes >= 810 && totalMinutes < 840) {
-      return "Zuhar Prayer time";
+    // 1:30 – 1:45 PM — Midday Prayer Pause (810-825 minutes)
+    else if (totalMinutes >= 810 && totalMinutes < 825) {
+      return "Midday Prayer Pause";
     }
-    // 2:00 - 2:30 PM: Lunch
-    else if (totalMinutes >= 840 && totalMinutes < 870) {
-      return "Lunch break";
+    // 1:45 – 2:30 PM — Fuel & Rest (825-870 minutes)
+    else if (totalMinutes >= 825 && totalMinutes < 870) {
+      return "Fuel & Rest";
     }
-    // 2:30 - 4:30 PM: Work Session 3
-    else if (totalMinutes >= 870 && totalMinutes < 1050) {
-      return "Work Session 3 in progress";
+    // 2:30 – 4:00 PM — Deep Focus 3 (870-960 minutes)
+    else if (totalMinutes >= 870 && totalMinutes < 960) {
+      return "Deep Focus 3";
     }
-    // 4:30 - 4:45 PM: Asr Prayer break
-    else if (totalMinutes >= 1050 && totalMinutes < 1065) {
-      return "Asr Prayer time";
+    // 4:00 – 4:15 PM — Reset Minute (960-975 minutes)
+    else if (totalMinutes >= 960 && totalMinutes < 975) {
+      return "Reset Minute";
     }
-    // 5:00 - 6:00 PM: Work Session 4
-    else if (totalMinutes >= 1080 && totalMinutes < 1140) {
-      return "Work Session 4 in progress";
+    // 4:15 – 5:30 PM — Deep Focus 4 (975-1050 minutes)
+    else if (totalMinutes >= 975 && totalMinutes < 1050) {
+      return "Deep Focus 4";
     }
-    // 6:00 - 7:30 PM: Maghrib Prayer
-    else if (totalMinutes >= 1140 && totalMinutes < 1230) {
-      return "Maghrib Prayer time";
+    // 5:30 – 6:00 PM — Evening Prayer Pause (1050-1080 minutes)
+    else if (totalMinutes >= 1050 && totalMinutes < 1080) {
+      return "Evening Prayer Pause";
     }
-    // 7:30 - 9:00 PM: Gym
-    else if (totalMinutes >= 1230 && totalMinutes < 1320) {
-      return "Gym workout session";
+    // 6:00 – 8:00 PM — Unwind & Reflect (1080-1200 minutes)
+    else if (totalMinutes >= 1080 && totalMinutes < 1200) {
+      return "Unwind & Reflect";
     }
-    // 9:00 - 11:00 PM: Isha Prayer
-    else if (totalMinutes >= 1320 && totalMinutes < 1440) {
-      return "Isha Prayer time";
+    // 8:00 – 9:00 PM — Physical Power Hour (1200-1260 minutes)
+    else if (totalMinutes >= 1200 && totalMinutes < 1260) {
+      return "Physical Power Hour";
     }
-    // 11:00 PM - 2:00 AM: Book reading (crosses midnight)
+    // 9:00 – 11:00 PM — Family & Fuel Time (1260-1380 minutes)
+    else if (totalMinutes >= 1260 && totalMinutes < 1380) {
+      return "Family & Fuel Time";
+    }
+    // 11:00 PM – 2:00 AM — Quiet Growth Hours (1380+ or 0-120 minutes)
     else if (totalMinutes >= 1380 || totalMinutes < 120) {
-      return "Book reading session";
+      return "Quiet Growth Hours";
     }
-    // 2:00 - 9:00 AM: Sleep time
+    // 2:00 - 9:00 AM: Sleep time (120-540 minutes)
     else if (totalMinutes >= 120 && totalMinutes < 540) {
-      return "Sleep time - rest well";
+      return "Rest and sleep time";
     }
     else {
       return "Transition period";

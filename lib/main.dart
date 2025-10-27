@@ -2888,7 +2888,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     bool isCompleted = currentState == HabitState.completed || 
                       currentState == HabitState.onTime || 
                       currentState == HabitState.delayed ||
-                      currentState == HabitState.partial;
+                      currentState == HabitState.partial ||
+                      currentState == HabitState.avoided;
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

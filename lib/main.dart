@@ -579,34 +579,30 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 
                 return Column(
                   children: [
-                    // Current time at top
-                    Padding(
-                      padding: const EdgeInsets.only(top: 60),
-                      child: Text(
-                        _formatTime12Hour(now),
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.w200,
-                          color: Colors.white,
-                          letterSpacing: 3,
-                        ),
-                      ),
-                    ),
-                    
                     // Main content in center
                     Expanded(
                       child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // Current habit name
+                            // Current habit name with glow effect
                             Text(
-                              _getCurrentHabitInAction(todayIndex),
-                              style: const TextStyle(
+                              _toSentenceCase(_getCurrentHabitInAction(todayIndex)),
+                              style: TextStyle(
                                 fontSize: 48,
                                 fontWeight: FontWeight.w200,
                                 color: Colors.white,
                                 letterSpacing: 2,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                    blurRadius: 15,
+                                  ),
+                                  Shadow(
+                                    color: Colors.white.withValues(alpha: 0.3),
+                                    blurRadius: 30,
+                                  ),
+                                ],
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -1069,57 +1065,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 ),
               ),
             ),
-            
-            const SizedBox(height: 40),
-            
-            // Elegant circular progress indicator
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  width: 2,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Background circle
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.05),
-                    ),
-                  ),
-                  // Progress circle
-                  SizedBox(
-                    width: 120,
-                    height: 120,
-                    child: CircularProgressIndicator(
-                      value: progress,
-                      strokeWidth: 3,
-                      backgroundColor: Colors.transparent,
-                      valueColor: AlwaysStoppedAnimation<Color>(timerColor),
-                    ),
-                  ),
-                  // Center percentage
-                  Center(
-                    child: Text(
-                      '${(progress * 100).toInt()}%',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w300,
-                        color: timerColor,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         );
       },
@@ -1138,6 +1083,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     
     String minute = time.minute.toString().padLeft(2, '0');
     return '$hour:$minute $period';
+  }
+
+  String _toSentenceCase(String text) {
+    if (text.isEmpty) return text;
+    
+    // Convert to lowercase and capitalize first letter
+    return text.toLowerCase().split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1);
+    }).join(' ');
   }
 
   void _animateProgressUpdate() {

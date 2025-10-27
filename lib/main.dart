@@ -564,144 +564,102 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       onPanDown: (_) => _onUserInteraction(),
       child: Material(
         child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF0D1117),
-                const Color(0xFF161B22),
-                const Color(0xFF21262D),
-              ],
-            ),
-          ),
+          color: Colors.black, // Pure black for battery saving
           child: DefaultTextStyle(
             style: const TextStyle(
               color: Colors.white,
               decoration: TextDecoration.none,
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(40),
-              child: StreamBuilder<DateTime>(
-                stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
-                builder: (context, snapshot) {
-                  final now = snapshot.data ?? DateTime.now();
-                  final todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
-                  
-                  return Row(
-                    children: [
-                      // Left side - Big animated icon
-                      Expanded(
-                        flex: 2,
-                        child: Center(
-                          child: _buildLargeAnimatedIcon(todayIndex),
+            child: StreamBuilder<DateTime>(
+              stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+              builder: (context, snapshot) {
+                final now = snapshot.data ?? DateTime.now();
+                final todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
+                
+                return Column(
+                  children: [
+                    // Current time at top
+                    Padding(
+                      padding: const EdgeInsets.only(top: 60),
+                      child: Text(
+                        _formatTime12Hour(now),
+                        style: const TextStyle(
+                          fontSize: 48,
+                          fontWeight: FontWeight.w200,
+                          color: Colors.white,
+                          letterSpacing: 3,
                         ),
                       ),
-                      
-                      const SizedBox(width: 60),
-                      
-                      // Right side - Details and next habit
-                      Expanded(
-                        flex: 3,
+                    ),
+                    
+                    // Main content in center
+                    Expanded(
+                      child: Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Current habit text
-                            Text(
-                              'CURRENT HABIT',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.white.withValues(alpha: 0.6),
-                                letterSpacing: 2,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
+                            // Large animated habit icon
+                            _buildLargeAnimatedIcon(todayIndex),
+                            
+                            const SizedBox(height: 40),
+                            
+                            // Current habit name
                             Text(
                               _getCurrentHabitInAction(todayIndex),
                               style: const TextStyle(
-                                fontSize: 36,
+                                fontSize: 42,
                                 fontWeight: FontWeight.w300,
                                 color: Colors.white,
-                                letterSpacing: 1,
+                                letterSpacing: 1.5,
                               ),
+                              textAlign: TextAlign.center,
                             ),
                             
-                            const SizedBox(height: 40),
+                            const SizedBox(height: 30),
                             
-                            // Current time display
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'CURRENT TIME',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    letterSpacing: 2,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _formatTime12Hour(now),
-                                  style: const TextStyle(
-                                    fontSize: 64,
-                                    fontWeight: FontWeight.w100,
-                                    color: Colors.white,
-                                    letterSpacing: 4,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            
-                            const SizedBox(height: 40),
-                            
-                            // Countdown timer
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'TIME REMAINING',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    letterSpacing: 2,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                _buildLargeCountdownTimer(),
-                              ],
-                            ),
-                            
-                            const SizedBox(height: 40),
-                            
-                            // Next habit
-                            _buildNextHabitSection(todayIndex),
-                            
-                            const SizedBox(height: 60),
-                            
-                            // Subtle hint to tap
-                            Opacity(
-                              opacity: 0.4,
-                              child: Text(
-                                'Tap anywhere to return',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withValues(alpha: 0.6),
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ),
+                            // Countdown timer with progress bar
+                            _buildLargeCountdownTimer(),
                           ],
                         ),
                       ),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                    
+                    // Next habit at bottom
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 80),
+                      child: Column(
+                        children: [
+                          Text(
+                            'NEXT',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.5),
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          _buildNextHabitSection(todayIndex),
+                          const SizedBox(height: 20),
+                          
+                          // Subtle hint to tap
+                          Opacity(
+                            opacity: 0.3,
+                            child: Text(
+                              'Tap to return',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -718,54 +676,38 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     String nextHabitName = _getNextHabitName(nextTransitionMinutes);
     IconData nextHabitIcon = _getNextHabitIcon(nextTransitionMinutes);
     
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          'NEXT HABIT',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.white.withValues(alpha: 0.6),
-            letterSpacing: 2,
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: const Color(0xFF30D158),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF30D158).withValues(alpha: 0.3),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(
+            nextHabitIcon,
+            color: Colors.white,
+            size: 18,
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFF30D158),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF30D158).withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                nextHabitIcon,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                nextHabitName,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          ],
+        const SizedBox(width: 12),
+        Text(
+          nextHabitName,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w400,
+            color: Colors.white,
+            letterSpacing: 0.5,
+          ),
         ),
       ],
     );

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:html' as html show window;
 import 'dart:js' as js;
+import 'package:audioplayers/audioplayers.dart';
 
 enum HabitState {
   none,
@@ -80,6 +81,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   DateTime _lastInteraction = DateTime.now();
   String _currentHabit = '';
   js.JsObject? _audioContext;
+  late AudioPlayer _audioPlayer;
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -422,6 +424,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 ],
               )
             : _buildCurrentView(),
+        floatingActionButton: _currentView == ViewType.day ? FloatingActionButton(
+          onPressed: _playAirplaneCallSound,
+          child: const Icon(Icons.volume_up),
+          tooltip: 'Test Habit Change Sound',
+          backgroundColor: Colors.blue,
+        ) : null,
       ),
     );
   }
@@ -431,6 +439,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     super.initState();
     _currentWeekStart = _getWeekStart(DateTime.now());
     _initializeAudio();
+    _audioPlayer = AudioPlayer();
     _currentHabit = _getCurrentHabitInAction(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
     
     _progressAnimationController = AnimationController(
@@ -529,6 +538,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _pointsNotifier.dispose();
     _compoundProgressNotifier.dispose();
     _categoryProgressNotifier.dispose();
+    _audioPlayer.dispose();
     _disableWakeLock();
     super.dispose();
   }
@@ -1112,42 +1122,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
   }
 
-  void _playAirplaneCallSound() {
-    if (_audioContext == null) return;
-    
+  void _playAirplaneCallSound() async {
     try {
-      // Create airplane call button sound - two-tone chime
-      final oscillator1 = _audioContext!.callMethod('createOscillator');
-      final oscillator2 = _audioContext!.callMethod('createOscillator');
-      final gainNode = _audioContext!.callMethod('createGain');
-      final currentTime = _audioContext!['currentTime'];
-      
-      // First tone - higher pitch (E note - 659.25 Hz)
-      oscillator1['type'] = 'sine';
-      oscillator1['frequency'].callMethod('setValueAtTime', [659.25, currentTime]);
-      
-      // Second tone - lower pitch (C note - 523.25 Hz) 
-      oscillator2['type'] = 'sine';
-      oscillator2['frequency'].callMethod('setValueAtTime', [523.25, currentTime]);
-      
-      // Gain envelope for smooth sound
-      gainNode['gain'].callMethod('setValueAtTime', [0, currentTime]);
-      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.3, currentTime + 0.1]);
-      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.2, currentTime + 0.4]);
-      gainNode['gain'].callMethod('linearRampToValueAtTime', [0, currentTime + 0.8]);
-      
-      // Connect audio nodes
-      oscillator1.callMethod('connect', [gainNode]);
-      oscillator2.callMethod('connect', [gainNode]);
-      gainNode.callMethod('connect', [_audioContext!['destination']]);
-      
-      // Play the two-tone sequence
-      oscillator1.callMethod('start', [currentTime]);
-      oscillator1.callMethod('stop', [currentTime + 0.4]);
-      
-      oscillator2.callMethod('start', [currentTime + 0.4]);
-      oscillator2.callMethod('stop', [currentTime + 0.8]);
-      
+      await _audioPlayer.play(AssetSource('sounds/call_passesnger.mp3'));
     } catch (e) {
       print('Error playing airplane call sound: $e');
     }

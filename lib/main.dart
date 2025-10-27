@@ -860,8 +860,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           child: Transform.rotate(
             angle: rotationAngle,
             child: Container(
-              width: 120,
-              height: 120,
+              width: 200,
+              height: 200,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
@@ -874,16 +874,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   end: Alignment.bottomRight,
                   transform: GradientRotation(time * 0.2),
                 ),
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: BorderRadius.circular(50),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF00C7BE).withValues(alpha: glowIntensity),
-                    blurRadius: 30,
-                    spreadRadius: 10,
+                    blurRadius: 50,
+                    spreadRadius: 15,
                   ),
                   BoxShadow(
                     color: const Color(0xFF30D158).withValues(alpha: glowIntensity * 0.8),
-                    blurRadius: 20,
+                    blurRadius: 35,
+                    spreadRadius: 8,
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF007AFF).withValues(alpha: glowIntensity * 0.6),
+                    blurRadius: 25,
                     spreadRadius: 5,
                   ),
                 ],
@@ -891,7 +896,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               child: Icon(
                 _getHabitIcon(dayIndex),
                 color: Colors.white,
-                size: 60,
+                size: 100,
               ),
             ),
           ),
@@ -3530,74 +3535,94 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     final currentMinute = now.minute;
     final totalMinutes = currentHour * 60 + currentMinute;
     
-    // 9:00 - 9:40 AM: Morning routine (Cold shower, Fajr Prayer, Quran)
+    // Enhanced schedule with better icons matching the detailed timeline
+    
+    // 9:00 - 9:40 AM: Cold shower
     if (totalMinutes >= 540 && totalMinutes < 580) {
-      if (totalMinutes < 550) {
-        return Icons.shower; // Cold shower
-      } else if (totalMinutes < 570) {
-        return Icons.self_improvement; // Fajr Prayer
-      } else {
-        return Icons.menu_book; // Quran reading
-      }
+      return Icons.water_drop; // More visually appealing than Icons.shower
     }
-    // 9:40 - 10:30 AM: Breakfast
-    else if (totalMinutes >= 580 && totalMinutes < 630) {
-      return Icons.restaurant;
+    // 9:40 - 10:00 AM: Fajr Nimaz
+    else if (totalMinutes >= 580 && totalMinutes < 600) {
+      return Icons.mosque; // Prayer/mosque icon
     }
-    // 10:30 AM - 12:00 PM: Work Session 1
-    else if (totalMinutes >= 630 && totalMinutes < 720) {
-      return Icons.work;
+    // 10:00 - 10:30 AM: Quran
+    else if (totalMinutes >= 600 && totalMinutes < 630) {
+      return Icons.menu_book; // Book icon for Quran
     }
-    // 12:00 - 12:20 PM: Break
-    else if (totalMinutes >= 720 && totalMinutes < 740) {
-      return Icons.free_breakfast;
+    // 10:30 - 11:30 AM: Gym
+    else if (totalMinutes >= 630 && totalMinutes < 690) {
+      return Icons.fitness_center; // Gym/fitness icon
     }
-    // 12:20 - 1:30 PM: Work Session 2
-    else if (totalMinutes >= 740 && totalMinutes < 810) {
-      return Icons.laptop_mac;
+    // 11:30 AM - 12:00 PM: Breakfast
+    else if (totalMinutes >= 690 && totalMinutes < 720) {
+      return Icons.breakfast_dining; // Breakfast icon
     }
-    // 1:30 - 2:00 PM: Zuhar Prayer
-    else if (totalMinutes >= 810 && totalMinutes < 840) {
-      return Icons.wb_sunny;
+    // 12:00 - 12:30 PM: Duhr
+    else if (totalMinutes >= 720 && totalMinutes < 750) {
+      return Icons.wb_sunny; // Sun icon for midday prayer
     }
-    // 2:00 - 2:30 PM: Lunch
-    else if (totalMinutes >= 840 && totalMinutes < 870) {
-      return Icons.lunch_dining;
+    // 12:30 - 2:00 PM: Book Reading
+    else if (totalMinutes >= 750 && totalMinutes < 840) {
+      return Icons.auto_stories; // Book/stories icon
     }
-    // 2:30 - 4:30 PM: Work Session 3
-    else if (totalMinutes >= 870 && totalMinutes < 1050) {
-      return Icons.code;
+    // 2:00 - 3:00 PM: Lunch
+    else if (totalMinutes >= 840 && totalMinutes < 900) {
+      return Icons.lunch_dining; // Lunch icon
     }
-    // 4:30 - 4:45 PM: Asr Prayer break
-    else if (totalMinutes >= 1050 && totalMinutes < 1065) {
-      return Icons.wb_twilight;
+    // 3:00 - 3:30 PM: Asr
+    else if (totalMinutes >= 900 && totalMinutes < 930) {
+      return Icons.wb_twilight; // Afternoon prayer icon
     }
-    // 5:00 - 6:00 PM: Work Session 4
-    else if (totalMinutes >= 1080 && totalMinutes < 1140) {
-      return Icons.desktop_mac;
+    // 3:30 - 5:30 PM: Data Structures
+    else if (totalMinutes >= 930 && totalMinutes < 1050) {
+      return Icons.code; // Code/programming icon
     }
-    // 6:00 - 7:30 PM: Maghrib Prayer
-    else if (totalMinutes >= 1140 && totalMinutes < 1230) {
-      return Icons.wb_twilight;
+    // 5:30 - 6:30 PM: Typing
+    else if (totalMinutes >= 1050 && totalMinutes < 1110) {
+      return Icons.keyboard; // Keyboard icon
     }
-    // 7:30 - 9:00 PM: Gym
-    else if (totalMinutes >= 1230 && totalMinutes < 1320) {
-      return Icons.fitness_center;
+    // 6:30 - 7:00 PM: Maghrib
+    else if (totalMinutes >= 1110 && totalMinutes < 1140) {
+      return Icons.nights_stay; // Evening prayer icon
     }
-    // 9:00 - 11:00 PM: Isha Prayer
-    else if (totalMinutes >= 1320 && totalMinutes < 1440) {
-      return Icons.nights_stay;
+    // 7:00 - 8:00 PM: Guitar
+    else if (totalMinutes >= 1140 && totalMinutes < 1200) {
+      return Icons.music_note; // Music/guitar icon
     }
-    // 11:00 PM - 2:00 AM: Book reading
-    else if (totalMinutes >= 1380 || totalMinutes < 120) {
-      return Icons.auto_stories;
+    // 8:00 - 8:30 PM: Dinner
+    else if (totalMinutes >= 1200 && totalMinutes < 1230) {
+      return Icons.dinner_dining; // Dinner icon
+    }
+    // 8:30 - 9:00 PM: Isha
+    else if (totalMinutes >= 1230 && totalMinutes < 1260) {
+      return Icons.star; // Star icon for night prayer
+    }
+    // 9:00 - 9:30 PM: Walk
+    else if (totalMinutes >= 1260 && totalMinutes < 1290) {
+      return Icons.directions_walk; // Walking icon
+    }
+    // 9:30 - 10:00 PM: Evening Quran
+    else if (totalMinutes >= 1290 && totalMinutes < 1320) {
+      return Icons.book; // Book icon for evening Quran
+    }
+    // 10:00 - 11:00 PM: Water
+    else if (totalMinutes >= 1320 && totalMinutes < 1380) {
+      return Icons.local_drink; // Drink/water icon
+    }
+    // 11:00 PM - 1:00 AM: Book Reading
+    else if (totalMinutes >= 1380 || totalMinutes < 60) {
+      return Icons.library_books; // Library books icon
+    }
+    // 1:00 - 2:00 AM: Bed time
+    else if (totalMinutes >= 60 && totalMinutes < 120) {
+      return Icons.bed; // Bed icon
     }
     // 2:00 - 9:00 AM: Sleep time
     else if (totalMinutes >= 120 && totalMinutes < 540) {
-      return Icons.bedtime;
+      return Icons.bedtime; // Sleep icon
     }
     else {
-      return Icons.access_time;
+      return Icons.access_time; // Default clock icon
     }
   }
 

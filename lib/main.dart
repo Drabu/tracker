@@ -1089,16 +1089,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _updateHabitState(String habit, int dayIndex, HabitState state, TimeOfDay? selectedTime) {
-    // Debug logging
-    print('DEBUG: Updating habit: $habit, dayIndex: $dayIndex, state: $state, weekKey: $_currentWeekKey');
-    
     // Update habit data without setState
     _trackingData[habit] ??= {};
     _trackingData[habit]![_currentWeekKey] ??= {};
     _trackingData[habit]![_currentWeekKey]![dayIndex] = state;
-    
-    // Debug logging
-    print('DEBUG: Updated state for $habit: ${_trackingData[habit]![_currentWeekKey]![dayIndex]}');
     
     // Handle time data
     if (selectedTime != null) {
@@ -2893,6 +2887,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     HabitState currentState = _trackingData[habitName]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
     bool isCompleted = currentState == HabitState.completed || 
                       currentState == HabitState.onTime || 
+                      currentState == HabitState.delayed ||
                       currentState == HabitState.partial;
     
     return Container(
@@ -3955,11 +3950,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     bool isSleepTracking = _sleepTrackingHabits.contains(habit);
     
     HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-    
-    // Debug logging for Fajr specifically
-    if (habit == 'Fajr') {
-      print('DEBUG: Building Fajr habit item - dayIndex: $dayIndex, weekKey: $_currentWeekKey, state: $state');
-    }
     int points = _habitStatePoints[habit]?[state] ?? 0;
     int maxPoints = _getMaxHabitPoints(habit);
     TimeOfDay? time = _timeData[habit]?[_currentWeekKey]?[dayIndex];
@@ -5321,11 +5311,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       case HabitState.none:
         return const SizedBox.shrink();
       case HabitState.onTime:
-        return const Icon(Icons.schedule, color: Colors.white, size: 18);
+        return const Icon(Icons.access_time, color: Colors.white, size: 18);
       case HabitState.completed:
         return const Icon(Icons.check_circle, color: Colors.white, size: 18);
       case HabitState.delayed:
-        return const Icon(Icons.access_time, color: Colors.white, size: 18);
+        return const Icon(Icons.schedule, color: Colors.white, size: 18);
       case HabitState.partial:
         return const Icon(Icons.circle_outlined, color: Colors.white, size: 18);
       case HabitState.missed:

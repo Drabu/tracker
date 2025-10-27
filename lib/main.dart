@@ -531,7 +531,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   void _setupIdleTimer() {
     _idleTimer?.cancel();
     _idleTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (DateTime.now().difference(_lastInteraction).inSeconds >= 30) { // 30 seconds idle
+      if (DateTime.now().difference(_lastInteraction).inSeconds >= 300) { // 5 minutes idle
         if (!_isIdleMode) {
           setState(() {
             _isIdleMode = true;

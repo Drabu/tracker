@@ -889,11 +889,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         
         int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
         int remainingMinutes = nextTransitionMinutes - currentMinutes;
-        int remainingSeconds = 60 - currentSeconds;
+        int remainingSeconds = currentSeconds == 0 ? 0 : 60 - currentSeconds;
         
-        if (remainingSeconds == 60) {
-          remainingSeconds = 0;
-        } else {
+        // If we have seconds remaining, subtract 1 from minutes
+        if (remainingSeconds > 0) {
           remainingMinutes -= 1;
         }
         
@@ -1051,11 +1050,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         
         int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
         int remainingMinutes = nextTransitionMinutes - currentMinutes;
-        int remainingSeconds = 60 - currentSeconds;
+        int remainingSeconds = currentSeconds == 0 ? 0 : 60 - currentSeconds;
         
-        if (remainingSeconds == 60) {
-          remainingSeconds = 0;
-        } else {
+        // If we have seconds remaining, subtract 1 from minutes
+        if (remainingSeconds > 0) {
           remainingMinutes -= 1;
         }
         
@@ -3483,12 +3481,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         // Get next transition time
         int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
         int remainingMinutes = nextTransitionMinutes - currentMinutes;
-        int remainingSeconds = 60 - currentSeconds;
+        int remainingSeconds = currentSeconds == 0 ? 0 : 60 - currentSeconds;
         
-        // Adjust if we're at the exact minute
-        if (remainingSeconds == 60) {
-          remainingSeconds = 0;
-        } else {
+        // If we have seconds remaining, subtract 1 from minutes
+        if (remainingSeconds > 0) {
           remainingMinutes -= 1;
         }
         

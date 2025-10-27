@@ -1139,7 +1139,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       if (!_isHabitDisabled(habit, dayIndex)) {
         totalCount++;
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completedCount++;
         }
       }
@@ -1157,7 +1157,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       if (!_isHabitDisabled(habit, dayIndex)) {
         total++;
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completed++;
         }
       }
@@ -2419,7 +2419,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         if (!_isHabitDisabled(habit, dayIndex)) {
           totalHabits++;
           HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-          if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+          if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
             totalCompleted++;
             if (state == HabitState.onTime) onTimeHabits++;
             if (state == HabitState.partial) partialHabits++;
@@ -2987,7 +2987,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           if (!_isHabitDisabled(habit, dayIndex)) {
             totalCount++;
             HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
               completedCount++;
             }
           }
@@ -3121,7 +3121,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     for (String habit in compoundHabits) {
       if (!_isHabitDisabled(habit, dayIndex)) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completedHabits.add(habit);
         }
       }
@@ -3830,7 +3830,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     for (String habit in habits) {
       if (!_isHabitDisabled(habit, dayIndex)) {
         HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completed++;
         }
       }
@@ -5356,7 +5356,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           if (!isDisabled) {
             totalCount++;
             HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.partial) {
+            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
               completedCount++;
               categoryCompleted++;
             }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:async';
+import 'dart:ui';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:html' as html show window;
@@ -598,27 +599,22 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            // Large animated habit icon
-                            _buildLargeAnimatedIcon(todayIndex),
-                            
-                            const SizedBox(height: 40),
-                            
                             // Current habit name
                             Text(
                               _getCurrentHabitInAction(todayIndex),
                               style: const TextStyle(
-                                fontSize: 42,
-                                fontWeight: FontWeight.w300,
+                                fontSize: 48,
+                                fontWeight: FontWeight.w200,
                                 color: Colors.white,
-                                letterSpacing: 1.5,
+                                letterSpacing: 2,
                               ),
                               textAlign: TextAlign.center,
                             ),
                             
-                            const SizedBox(height: 30),
+                            const SizedBox(height: 60),
                             
-                            // Countdown timer with progress bar
-                            _buildLargeCountdownTimer(),
+                            // Elegant countdown timer
+                            _buildElegantCountdownTimer(),
                           ],
                         ),
                       ),
@@ -1004,6 +1000,127 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildElegantCountdownTimer() {
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      builder: (context, snapshot) {
+        final now = snapshot.data ?? DateTime.now();
+        final currentMinutes = now.hour * 60 + now.minute;
+        final currentSeconds = now.second;
+        
+        int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
+        int remainingMinutes = nextTransitionMinutes - currentMinutes;
+        int remainingSeconds = 60 - currentSeconds;
+        
+        if (remainingSeconds == 60) {
+          remainingSeconds = 0;
+        } else {
+          remainingMinutes -= 1;
+        }
+        
+        if (remainingMinutes < 0) {
+          remainingMinutes += 1440;
+        }
+        
+        int hours = remainingMinutes ~/ 60;
+        int minutes = remainingMinutes % 60;
+        
+        // Calculate progress for circular indicator
+        int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
+        int totalDuration = nextTransitionMinutes - currentActivityStart;
+        double totalRemaining = remainingMinutes.toDouble() + remainingSeconds / 60;
+        double progress = totalDuration > 0 ? (totalRemaining / totalDuration).clamp(0.0, 1.0) : 0.0;
+        
+        // Color based on urgency
+        Color timerColor = minutes <= 5 && hours == 0 ? const Color(0xFFFF9F0A) : Colors.white;
+        
+        String timeString;
+        if (hours > 0) {
+          timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+        } else {
+          timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+        }
+        
+        return Column(
+          children: [
+            // Large elegant timer display
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: timerColor.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                timeString,
+                style: TextStyle(
+                  fontSize: 72,
+                  fontWeight: FontWeight.w100,
+                  color: timerColor,
+                  letterSpacing: 6,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 40),
+            
+            // Elegant circular progress indicator
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 2,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  // Background circle
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.05),
+                    ),
+                  ),
+                  // Progress circle
+                  SizedBox(
+                    width: 120,
+                    height: 120,
+                    child: CircularProgressIndicator(
+                      value: progress,
+                      strokeWidth: 3,
+                      backgroundColor: Colors.transparent,
+                      valueColor: AlwaysStoppedAnimation<Color>(timerColor),
+                    ),
+                  ),
+                  // Center percentage
+                  Center(
+                    child: Text(
+                      '${(progress * 100).toInt()}%',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w300,
+                        color: timerColor,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );

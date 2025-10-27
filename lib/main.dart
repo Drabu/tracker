@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:html' as html show window;
 import 'dart:js' as js;
-import 'package:audioplayers/audioplayers.dart';
+import 'dart:html' as html;
 
 enum HabitState {
   none,
@@ -81,7 +81,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   DateTime _lastInteraction = DateTime.now();
   String _currentHabit = '';
   js.JsObject? _audioContext;
-  late AudioPlayer _audioPlayer;
+  html.AudioElement? _audioElement;
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -439,7 +439,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     super.initState();
     _currentWeekStart = _getWeekStart(DateTime.now());
     _initializeAudio();
-    _audioPlayer = AudioPlayer();
     _currentHabit = _getCurrentHabitInAction(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
     
     _progressAnimationController = AnimationController(
@@ -538,7 +537,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _pointsNotifier.dispose();
     _compoundProgressNotifier.dispose();
     _categoryProgressNotifier.dispose();
-    _audioPlayer.dispose();
     _disableWakeLock();
     super.dispose();
   }
@@ -1116,15 +1114,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   void _initializeAudio() {
     try {
-      _audioContext = js.JsObject(js.context['AudioContext']);
+      _audioElement = html.AudioElement('assets/sounds/call_passesnger.mp3');
+      _audioElement!.preload = 'auto';
     } catch (e) {
-      print('Audio context initialization failed: $e');
+      print('Audio element initialization failed: $e');
     }
   }
 
   void _playAirplaneCallSound() async {
     try {
-      await _audioPlayer.play(AssetSource('sounds/call_passesnger.mp3'));
+      if (_audioElement != null) {
+        _audioElement!.currentTime = 0; // Reset to beginning
+        await _audioElement!.play();
+      }
     } catch (e) {
       print('Error playing airplane call sound: $e');
     }

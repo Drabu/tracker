@@ -78,6 +78,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   Timer? _idleTimer;
   bool _isIdleMode = false;
   DateTime _lastInteraction = DateTime.now();
+  String _currentHabit = '';
+  js.JsObject? _audioContext;
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -428,6 +430,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   void initState() {
     super.initState();
     _currentWeekStart = _getWeekStart(DateTime.now());
+    _initializeAudio();
+    _currentHabit = _getCurrentHabitInAction(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
     
     _progressAnimationController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -576,6 +580,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               builder: (context, snapshot) {
                 final now = snapshot.data ?? DateTime.now();
                 final todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
+                
+                // Check for habit changes and play sound
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _checkHabitChange();
+                });
                 
                 return Column(
                   children: [
@@ -1093,6 +1102,66 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       if (word.isEmpty) return word;
       return word[0].toUpperCase() + word.substring(1);
     }).join(' ');
+  }
+
+  void _initializeAudio() {
+    try {
+      _audioContext = js.JsObject(js.context['AudioContext']);
+    } catch (e) {
+      print('Audio context initialization failed: $e');
+    }
+  }
+
+  void _playAirplaneCallSound() {
+    if (_audioContext == null) return;
+    
+    try {
+      // Create airplane call button sound - two-tone chime
+      final oscillator1 = _audioContext!.callMethod('createOscillator');
+      final oscillator2 = _audioContext!.callMethod('createOscillator');
+      final gainNode = _audioContext!.callMethod('createGain');
+      final currentTime = _audioContext!['currentTime'];
+      
+      // First tone - higher pitch (E note - 659.25 Hz)
+      oscillator1['type'] = 'sine';
+      oscillator1['frequency'].callMethod('setValueAtTime', [659.25, currentTime]);
+      
+      // Second tone - lower pitch (C note - 523.25 Hz) 
+      oscillator2['type'] = 'sine';
+      oscillator2['frequency'].callMethod('setValueAtTime', [523.25, currentTime]);
+      
+      // Gain envelope for smooth sound
+      gainNode['gain'].callMethod('setValueAtTime', [0, currentTime]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.3, currentTime + 0.1]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.2, currentTime + 0.4]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0, currentTime + 0.8]);
+      
+      // Connect audio nodes
+      oscillator1.callMethod('connect', [gainNode]);
+      oscillator2.callMethod('connect', [gainNode]);
+      gainNode.callMethod('connect', [_audioContext!['destination']]);
+      
+      // Play the two-tone sequence
+      oscillator1.callMethod('start', [currentTime]);
+      oscillator1.callMethod('stop', [currentTime + 0.4]);
+      
+      oscillator2.callMethod('start', [currentTime + 0.4]);
+      oscillator2.callMethod('stop', [currentTime + 0.8]);
+      
+    } catch (e) {
+      print('Error playing airplane call sound: $e');
+    }
+  }
+
+  void _checkHabitChange() {
+    final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
+    final newHabit = _getCurrentHabitInAction(todayIndex);
+    
+    if (newHabit != _currentHabit && _currentHabit.isNotEmpty) {
+      _playAirplaneCallSound();
+    }
+    
+    _currentHabit = newHabit;
   }
 
   void _animateProgressUpdate() {

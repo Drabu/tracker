@@ -936,11 +936,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           timeColor = minutes <= 5 ? const Color(0xFFFF9F0A) : Colors.white;
         }
         
-        // Calculate progress through current time slot
+        // Calculate countdown progress (remaining time)
         int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
         int totalDuration = nextTransitionMinutes - currentActivityStart;
-        double elapsed = (currentMinutes - currentActivityStart).toDouble() + (60 - remainingSeconds) / 60;
-        double progress = totalDuration > 0 ? (elapsed / totalDuration).clamp(0.0, 1.0) : 0.0;
+        double totalRemaining = remainingMinutes.toDouble() + remainingSeconds / 60;
+        double progress = totalDuration > 0 ? (totalRemaining / totalDuration).clamp(0.0, 1.0) : 0.0;
         
         return Material(
           color: Colors.transparent,
@@ -1047,7 +1047,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               const SizedBox(height: 8),
               // Progress percentage
               Text(
-                '${(progress * 100).toInt()}% Complete',
+                '${(progress * 100).toInt()}% Remaining',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.white.withValues(alpha: 0.6),

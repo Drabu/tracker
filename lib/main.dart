@@ -424,11 +424,31 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 ],
               )
             : _buildCurrentView(),
-        floatingActionButton: _currentView == ViewType.day ? FloatingActionButton(
-          onPressed: _playAirplaneCallSound,
-          child: const Icon(Icons.volume_up),
-          tooltip: 'Test Habit Change Sound',
-          backgroundColor: Colors.blue,
+        floatingActionButton: _currentView == ViewType.day ? Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton(
+              onPressed: () {
+                final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
+                final currentHabit = _getCurrentHabitInAction(todayIndex);
+                print('Current habit: $currentHabit');
+                print('Stored habit: $_currentHabit');
+                print('Time: ${DateTime.now()}');
+              },
+              child: const Icon(Icons.info),
+              tooltip: 'Check Current Habit',
+              backgroundColor: Colors.green,
+              heroTag: "info",
+            ),
+            const SizedBox(height: 10),
+            FloatingActionButton(
+              onPressed: _playAirplaneCallSound,
+              child: const Icon(Icons.volume_up),
+              tooltip: 'Test Habit Change Sound',
+              backgroundColor: Colors.blue,
+              heroTag: "sound",
+            ),
+          ],
         ) : null,
       ),
     );
@@ -498,6 +518,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     
     // Set up timer to update current day at midnight
     _setupDayUpdateTimer();
+    
+    // Set up timer to check for habit changes
+    _setupHabitChangeTimer();
     
     // Load saved data and start animations
     _loadData().then((_) {
@@ -1137,6 +1160,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     final newHabit = _getCurrentHabitInAction(todayIndex);
     
     if (newHabit != _currentHabit && _currentHabit.isNotEmpty) {
+      print('Habit changed from "$_currentHabit" to "$newHabit" - playing sound');
       _playAirplaneCallSound();
     }
     
@@ -1392,6 +1416,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       });
       _saveData();
     }
+  }
+
+  void _setupHabitChangeTimer() {
+    // Check for habit changes every 30 seconds
+    Timer.periodic(const Duration(seconds: 30), (_) {
+      _checkHabitChange();
+    });
   }
 
   // Data persistence methods

@@ -2379,27 +2379,32 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getBestDailyScore() {
     int bestScore = 0;
     
-    // Check all weeks and days in tracking data
-    for (var weekData in _trackingData.values) {
-      for (var week in weekData.values) {
-        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
-          int dayScore = 0;
-          
-          for (var category in _categories.entries) {
-            for (String habit in category.value) {
-              if (!_isHabitDisabled(habit, dayIndex)) {
-                HabitState? state = week[dayIndex];
-                if (state != null) {
-                  int points = _getHabitPoints(habit, state, dayIndex);
-                  dayScore += points;
-                }
+    // Get all week keys from any habit's data
+    Set<String> allWeekKeys = {};
+    for (var habitWeeks in _trackingData.values) {
+      allWeekKeys.addAll(habitWeeks.keys);
+    }
+    
+    // Check each week and each day
+    for (String weekKey in allWeekKeys) {
+      for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+        int dayScore = 0;
+        
+        // Calculate total score for this specific day
+        for (var category in _categories.entries) {
+          for (String habit in category.value) {
+            if (!_isHabitDisabled(habit, dayIndex)) {
+              HabitState? state = _trackingData[habit]?[weekKey]?[dayIndex];
+              if (state != null) {
+                int points = _getHabitPoints(habit, state, dayIndex);
+                dayScore += points;
               }
             }
           }
-          
-          if (dayScore > bestScore) {
-            bestScore = dayScore;
-          }
+        }
+        
+        if (dayScore > bestScore) {
+          bestScore = dayScore;
         }
       }
     }

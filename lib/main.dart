@@ -650,7 +650,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                             const SizedBox(height: 60),
                             
                             // Elegant countdown timer
-                            _buildElegantCountdownTimer(),
+                            _buildDirectCountdownTimer(now),
                           ],
                         ),
                       ),
@@ -1045,67 +1045,71 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
       builder: (context, snapshot) {
         final now = snapshot.data ?? DateTime.now();
-        final currentMinutes = now.hour * 60 + now.minute;
-        final currentSeconds = now.second;
-        
-        int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
-        int remainingMinutes = nextTransitionMinutes - currentMinutes;
-        int remainingSeconds = currentSeconds == 0 ? 0 : 60 - currentSeconds;
-        
-        // If we have seconds remaining, subtract 1 from minutes
-        if (remainingSeconds > 0) {
-          remainingMinutes -= 1;
-        }
-        
-        if (remainingMinutes < 0) {
-          remainingMinutes += 1440;
-        }
-        
-        int hours = remainingMinutes ~/ 60;
-        int minutes = remainingMinutes % 60;
-        
-        // Calculate progress for circular indicator
-        int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
-        int totalDuration = nextTransitionMinutes - currentActivityStart;
-        double totalRemaining = remainingMinutes.toDouble() + remainingSeconds / 60;
-        double progress = totalDuration > 0 ? (totalRemaining / totalDuration).clamp(0.0, 1.0) : 0.0;
-        
-        // Color based on urgency
-        Color timerColor = minutes <= 5 && hours == 0 ? const Color(0xFFFF9F0A) : Colors.white;
-        
-        String timeString;
-        if (hours > 0) {
-          timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-        } else {
-          timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
-        }
-        
-        return Column(
-          children: [
-            // Large elegant timer display
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: timerColor.withValues(alpha: 0.3),
-                  width: 2,
-                ),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                timeString,
-                style: TextStyle(
-                  fontSize: 72,
-                  fontWeight: FontWeight.w100,
-                  color: timerColor,
-                  letterSpacing: 6,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ],
-        );
+        return _buildDirectCountdownTimer(now);
       },
+    );
+  }
+
+  Widget _buildDirectCountdownTimer(DateTime now) {
+    final currentMinutes = now.hour * 60 + now.minute;
+    final currentSeconds = now.second;
+    
+    int nextTransitionMinutes = _getNextTransitionTime(currentMinutes);
+    int remainingMinutes = nextTransitionMinutes - currentMinutes;
+    int remainingSeconds = currentSeconds == 0 ? 0 : 60 - currentSeconds;
+    
+    // If we have seconds remaining, subtract 1 from minutes
+    if (remainingSeconds > 0) {
+      remainingMinutes -= 1;
+    }
+    
+    if (remainingMinutes < 0) {
+      remainingMinutes += 1440;
+    }
+    
+    int hours = remainingMinutes ~/ 60;
+    int minutes = remainingMinutes % 60;
+    
+    // Calculate progress for circular indicator
+    int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
+    int totalDuration = nextTransitionMinutes - currentActivityStart;
+    double totalRemaining = remainingMinutes.toDouble() + remainingSeconds / 60;
+    double progress = totalDuration > 0 ? (totalRemaining / totalDuration).clamp(0.0, 1.0) : 0.0;
+    
+    // Color based on urgency
+    Color timerColor = minutes <= 5 && hours == 0 ? const Color(0xFFFF9F0A) : Colors.white;
+    
+    String timeString;
+    if (hours > 0) {
+      timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    } else {
+      timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    }
+    
+    return Column(
+      children: [
+        // Large elegant timer display
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: timerColor.withValues(alpha: 0.3),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            timeString,
+            style: TextStyle(
+              fontSize: 72,
+              fontWeight: FontWeight.w100,
+              color: timerColor,
+              letterSpacing: 6,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1135,8 +1139,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   void _initializeAudio() {
     try {
-      _audioElement = html.AudioElement('assets/sounds/call_passesnger.mp3');
+      // Try multiple potential paths for the audio file
+      _audioElement = html.AudioElement();
       _audioElement!.preload = 'auto';
+      
+      // Set multiple sources for better compatibility
+      _audioElement!.src = './assets/sounds/call_passesnger.mp3';
+      
+      // Add error handling
+      _audioElement!.onError.listen((event) {
+        print('Audio loading error: $event');
+        // Try alternative path
+        _audioElement!.src = 'assets/sounds/call_passesnger.mp3';
+      });
+      
+      _audioElement!.onCanPlay.listen((event) {
+        print('Audio can play');
+      });
+      
     } catch (e) {
       print('Audio element initialization failed: $e');
     }
@@ -1146,10 +1166,33 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     try {
       if (_audioElement != null) {
         _audioElement!.currentTime = 0; // Reset to beginning
-        await _audioElement!.play();
+        
+        // Check if audio is ready to play
+        if (_audioElement!.readyState >= 2) { // HAVE_CURRENT_DATA
+          await _audioElement!.play();
+        } else {
+          // If not ready, wait for it to be ready
+          _audioElement!.onCanPlay.first.then((_) async {
+            try {
+              await _audioElement!.play();
+            } catch (e) {
+              print('Delayed play error: $e');
+            }
+          });
+        }
+      } else {
+        print('Audio element not initialized');
       }
     } catch (e) {
       print('Error playing airplane call sound: $e');
+      
+      // Fallback: try to create a new audio element and play immediately
+      try {
+        final fallbackAudio = html.AudioElement('./assets/sounds/call_passesnger.mp3');
+        await fallbackAudio.play();
+      } catch (fallbackError) {
+        print('Fallback audio also failed: $fallbackError');
+      }
     }
   }
 

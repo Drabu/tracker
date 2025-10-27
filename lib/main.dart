@@ -936,60 +936,126 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           timeColor = minutes <= 5 ? const Color(0xFFFF9F0A) : Colors.white;
         }
         
+        // Calculate progress through current time slot
+        int currentActivityStart = _getCurrentActivityStartTime(currentMinutes);
+        int totalDuration = nextTransitionMinutes - currentActivityStart;
+        double elapsed = (currentMinutes - currentActivityStart).toDouble() + (60 - remainingSeconds) / 60;
+        double progress = totalDuration > 0 ? (elapsed / totalDuration).clamp(0.0, 1.0) : 0.0;
+        
         return Material(
           color: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  timeColor.withValues(alpha: 0.2),
-                  timeColor.withValues(alpha: 0.1),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: timeColor.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: timeColor.withValues(alpha: 0.2),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.timer,
-                  color: timeColor,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  timeString,
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w300,
-                    color: timeColor,
-                    letterSpacing: 2,
-                    decoration: TextDecoration.none,
-                    shadows: [
-                      Shadow(
-                        color: timeColor.withValues(alpha: 0.5),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      timeColor.withValues(alpha: 0.2),
+                      timeColor.withValues(alpha: 0.1),
                     ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: timeColor.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: timeColor.withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.timer,
+                      color: timeColor,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      timeString,
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w300,
+                        color: timeColor,
+                        letterSpacing: 2,
+                        decoration: TextDecoration.none,
+                        shadows: [
+                          Shadow(
+                            color: timeColor.withValues(alpha: 0.5),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Progress bar
+              Container(
+                width: 280,
+                height: 8,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+                child: Stack(
+                  children: [
+                    // Background track
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                    ),
+                    // Progress fill with animated gradient
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: 280 * progress,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        gradient: LinearGradient(
+                          colors: [
+                            timeColor,
+                            timeColor.withValues(alpha: 0.7),
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: timeColor.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Progress percentage
+              Text(
+                '${(progress * 100).toInt()}% Complete',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  letterSpacing: 0.5,
+                  decoration: TextDecoration.none,
+                ),
+              ),
+            ],
           ),
         );
       },

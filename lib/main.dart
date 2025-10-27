@@ -176,7 +176,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     'Meal': {HabitState.completed: 3, HabitState.missed: 0},
     'Coffee': {HabitState.completed: 2, HabitState.missed: 0},
     'Cold Shower': {HabitState.completed: 20, HabitState.missed: 0},
-    'Gym': {HabitState.completed: 25, HabitState.partial: 15, HabitState.missed: 0},
+    'Gym': {HabitState.completed: 20, HabitState.partial: 10, HabitState.missed: 0},
     'Mid Day Shower': {HabitState.completed: 10, HabitState.missed: 0},
     'Water': {HabitState.completed: 5, HabitState.partial: 3, HabitState.missed: 0},
     'Bed Time': {HabitState.onTime: 5, HabitState.delayed: 2, HabitState.missed: 0},

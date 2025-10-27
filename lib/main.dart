@@ -645,7 +645,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+                                  _formatTime12Hour(now),
                                   style: const TextStyle(
                                     fontSize: 64,
                                     fontWeight: FontWeight.w100,
@@ -938,19 +938,76 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         
         return Material(
           color: Colors.transparent,
-          child: Text(
-            timeString,
-            style: TextStyle(
-              fontSize: 48,
-              fontWeight: FontWeight.w200,
-              color: timeColor,
-              letterSpacing: 3,
-              decoration: TextDecoration.none,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  timeColor.withValues(alpha: 0.2),
+                  timeColor.withValues(alpha: 0.1),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: timeColor.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: timeColor.withValues(alpha: 0.2),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.timer,
+                  color: timeColor,
+                  size: 24,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  timeString,
+                  style: TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.w300,
+                    color: timeColor,
+                    letterSpacing: 2,
+                    decoration: TextDecoration.none,
+                    shadows: [
+                      Shadow(
+                        color: timeColor.withValues(alpha: 0.5),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         );
       },
     );
+  }
+
+  String _formatTime12Hour(DateTime time) {
+    int hour = time.hour;
+    String period = hour >= 12 ? 'PM' : 'AM';
+    
+    if (hour == 0) {
+      hour = 12; // 12:xx AM
+    } else if (hour > 12) {
+      hour = hour - 12; // 1:xx PM - 11:xx PM
+    }
+    
+    String minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute $period';
   }
 
   void _animateProgressUpdate() {

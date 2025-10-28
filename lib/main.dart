@@ -84,6 +84,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   html.AudioElement? _audioElement;
   bool _audioContextResumed = false;
   
+  // Audio elements for different sounds
+  html.AudioElement? _completedSoundElement;
+  html.AudioElement? _missedSoundElement;
+  html.AudioElement? _partialSoundElement;
+  
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
   final ValueNotifier<double> _compoundProgressNotifier = ValueNotifier<double>(0.0);
@@ -1132,22 +1137,39 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   void _initializeAudio() {
     try {
-      // Try multiple potential paths for the audio file
+      // Initialize cabin chime for habit changes
       _audioElement = html.AudioElement();
       _audioElement!.preload = 'auto';
-      
-      // Set multiple sources for better compatibility
       _audioElement!.src = './assets/sounds/cabin_chime.mp3';
       
-      // Add error handling
+      // Initialize completion sounds
+      _completedSoundElement = html.AudioElement();
+      _completedSoundElement!.preload = 'auto';
+      _completedSoundElement!.src = './assets/sounds/breach_lets_go.mp3';
+      
+      _missedSoundElement = html.AudioElement();
+      _missedSoundElement!.preload = 'auto';
+      _missedSoundElement!.src = './assets/sounds/it_was_at_this_moment.mp3';
+      
+      _partialSoundElement = html.AudioElement();
+      _partialSoundElement!.preload = 'auto';
+      _partialSoundElement!.src = './assets/sounds/oh_hell_naw.mp3';
+      
+      // Add error handling for all audio elements
       _audioElement!.onError.listen((event) {
-        print('Audio loading error: $event');
-        // Try alternative path
-        _audioElement!.src = 'assets/sounds/cabin_chime.mp3';
+        print('Cabin chime loading error: $event');
       });
       
-      _audioElement!.onCanPlay.listen((event) {
-        print('Audio can play');
+      _completedSoundElement!.onError.listen((event) {
+        print('Completed sound loading error: $event');
+      });
+      
+      _missedSoundElement!.onError.listen((event) {
+        print('Missed sound loading error: $event');
+      });
+      
+      _partialSoundElement!.onError.listen((event) {
+        print('Partial sound loading error: $event');
       });
       
     } catch (e) {
@@ -1252,6 +1274,50 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _currentHabit = newHabit;
   }
 
+  void _playCompletionSound(HabitState state) async {
+    try {
+      // Ensure audio context is resumed
+      if (_audioContext == null) {
+        _audioContext = js.JsObject(js.context['AudioContext']);
+      }
+      
+      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
+        await _audioContext!.callMethod('resume');
+        _audioContextResumed = true;
+      }
+
+      html.AudioElement? soundElement;
+      String soundName;
+      
+      switch (state) {
+        case HabitState.completed:
+        case HabitState.onTime:
+          soundElement = _completedSoundElement;
+          soundName = "Let's Go (Completed)";
+          break;
+        case HabitState.missed:
+          soundElement = _missedSoundElement;
+          soundName = "It Was At This Moment (Missed)";
+          break;
+        case HabitState.partial:
+          soundElement = _partialSoundElement;
+          soundName = "Oh Hell Naw (Partial)";
+          break;
+        default:
+          return; // No sound for other states
+      }
+      
+      if (soundElement != null) {
+        soundElement.currentTime = 0; // Reset to beginning
+        await soundElement.play();
+        print('Playing $soundName sound');
+      }
+      
+    } catch (e) {
+      print('Error playing completion sound: $e');
+    }
+  }
+
   void _animateProgressUpdate() {
     _progressAnimationController.reset();
     _ringAnimationController.reset();
@@ -1279,6 +1345,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     // Update specific progress values
     _updateProgressNotifiers(habit);
     _animateSpecificProgress(habit);
+    
+    // Play sound for completion states
+    _playCompletionSound(state);
   }
 
   void _updateProgressNotifiers(String habit) {

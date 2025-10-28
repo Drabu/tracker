@@ -82,6 +82,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   String _currentHabit = '';
   js.JsObject? _audioContext;
   html.AudioElement? _audioElement;
+  bool _audioContextResumed = false;
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -1186,15 +1187,25 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _playSynthesizedAirplaneSound();
   }
 
-  void _playSynthesizedAirplaneSound() {
+  void _playSynthesizedAirplaneSound() async {
     try {
-      final audioContext = js.JsObject(js.context['AudioContext']);
+      // Initialize AudioContext if not done yet
+      if (_audioContext == null) {
+        _audioContext = js.JsObject(js.context['AudioContext']);
+      }
+      
+      // Resume AudioContext if it's suspended (required by browser autoplay policy)
+      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
+        await _audioContext!.callMethod('resume');
+        _audioContextResumed = true;
+        print('AudioContext resumed');
+      }
       
       // Create airplane call button sound - two-tone chime
-      final oscillator1 = audioContext.callMethod('createOscillator');
-      final oscillator2 = audioContext.callMethod('createOscillator');
-      final gainNode = audioContext.callMethod('createGain');
-      final currentTime = audioContext['currentTime'];
+      final oscillator1 = _audioContext!.callMethod('createOscillator');
+      final oscillator2 = _audioContext!.callMethod('createOscillator');
+      final gainNode = _audioContext!.callMethod('createGain');
+      final currentTime = _audioContext!['currentTime'];
       
       // First tone - higher pitch (E note - 659.25 Hz)
       oscillator1['type'] = 'sine';
@@ -1213,7 +1224,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       // Connect audio nodes
       oscillator1.callMethod('connect', [gainNode]);
       oscillator2.callMethod('connect', [gainNode]);
-      gainNode.callMethod('connect', [audioContext['destination']]);
+      gainNode.callMethod('connect', [_audioContext!['destination']]);
       
       // Play the two-tone sequence
       oscillator1.callMethod('start', [currentTime]);

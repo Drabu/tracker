@@ -1137,13 +1137,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       _audioElement!.preload = 'auto';
       
       // Set multiple sources for better compatibility
-      _audioElement!.src = './assets/sounds/call_passesnger.mp3';
+      _audioElement!.src = './assets/sounds/cabin_chime.mp3';
       
       // Add error handling
       _audioElement!.onError.listen((event) {
         print('Audio loading error: $event');
         // Try alternative path
-        _audioElement!.src = 'assets/sounds/call_passesnger.mp3';
+        _audioElement!.src = 'assets/sounds/cabin_chime.mp3';
       });
       
       _audioElement!.onCanPlay.listen((event) {

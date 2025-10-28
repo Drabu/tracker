@@ -755,28 +755,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       hours = hours % 24;
     }
     
-    // Map transition times to habit names
-    if (hours == 9 && minutes == 0) return "Cold shower";
-    if (hours == 9 && minutes == 40) return "Fajr Nimaz";
-    if (hours == 10 && minutes == 0) return "Quran";
-    if (hours == 10 && minutes == 30) return "Gym";
-    if (hours == 11 && minutes == 30) return "Breakfast";
-    if (hours == 12 && minutes == 0) return "Duhr";
-    if (hours == 12 && minutes == 30) return "Book Reading";
-    if (hours == 14 && minutes == 0) return "Lunch";
-    if (hours == 15 && minutes == 0) return "Asr";
-    if (hours == 15 && minutes == 30) return "Data Structures";
-    if (hours == 17 && minutes == 30) return "Typing";
-    if (hours == 18 && minutes == 30) return "Maghrib";
-    if (hours == 19 && minutes == 0) return "Guitar";
-    if (hours == 20 && minutes == 0) return "Dinner";
-    if (hours == 20 && minutes == 30) return "Isha";
-    if (hours == 21 && minutes == 0) return "Walk";
-    if (hours == 21 && minutes == 30) return "Evening Quran";
-    if (hours == 22 && minutes == 0) return "Water";
+    // Map transition times to habit names based on current schedule
+    if (hours == 9 && minutes == 0) return "Cold Shower";
+    if (hours == 9 && minutes == 30) return "Morning Quran";
+    if (hours == 9 && minutes == 45) return "Breakfast Time";
+    if (hours == 10 && minutes == 30) return "Deep Focus 1";
+    if (hours == 12 && minutes == 0) return "Guitar Practice";
+    if (hours == 12 && minutes == 20) return "Deep Focus 2";
+    if (hours == 13 && minutes == 30) return "Zuhar Nimaz";
+    if (hours == 13 && minutes == 45) return "Lunch Time";
+    if (hours == 14 && minutes == 30) return "Deep Focus 3";
+    if (hours == 16 && minutes == 0) return "Reset Minute";
+    if (hours == 16 && minutes == 15) return "Deep Focus 4";
+    if (hours == 17 && minutes == 30) return "Asr Nimaz";
+    if (hours == 18 && minutes == 0) return "Chill Time";
+    if (hours == 20 && minutes == 0) return "Hit the Gym";
+    if (hours == 21 && minutes == 0) return "Dinner";
     if (hours == 23 && minutes == 0) return "Book Reading";
-    if (hours == 1 && minutes == 0) return "Bed time";
-    if (hours == 2 && minutes == 0) return "Sleep time";
+    if (hours == 2 && minutes == 0) return "Sleep";
     
     return "Next activity";
   }
@@ -791,27 +787,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       hours = hours % 24;
     }
     
-    // Map transition times to icons
+    // Map transition times to icons based on current schedule
     if (hours == 9 && minutes == 0) return Icons.shower;
-    if (hours == 9 && minutes == 40) return Icons.mosque;
-    if (hours == 10 && minutes == 0) return Icons.menu_book;
-    if (hours == 10 && minutes == 30) return Icons.fitness_center;
-    if (hours == 11 && minutes == 30) return Icons.breakfast_dining;
-    if (hours == 12 && minutes == 0) return Icons.mosque;
-    if (hours == 12 && minutes == 30) return Icons.book;
-    if (hours == 14 && minutes == 0) return Icons.lunch_dining;
-    if (hours == 15 && minutes == 0) return Icons.mosque;
-    if (hours == 15 && minutes == 30) return Icons.code;
-    if (hours == 17 && minutes == 30) return Icons.keyboard;
-    if (hours == 18 && minutes == 30) return Icons.mosque;
-    if (hours == 19 && minutes == 0) return Icons.music_note;
-    if (hours == 20 && minutes == 0) return Icons.dinner_dining;
-    if (hours == 20 && minutes == 30) return Icons.mosque;
-    if (hours == 21 && minutes == 0) return Icons.directions_walk;
-    if (hours == 21 && minutes == 30) return Icons.menu_book;
-    if (hours == 22 && minutes == 0) return Icons.water_drop;
+    if (hours == 9 && minutes == 30) return Icons.menu_book;
+    if (hours == 9 && minutes == 45) return Icons.breakfast_dining;
+    if (hours == 10 && minutes == 30) return Icons.work;
+    if (hours == 12 && minutes == 0) return Icons.music_note;
+    if (hours == 12 && minutes == 20) return Icons.work;
+    if (hours == 13 && minutes == 30) return Icons.mosque;
+    if (hours == 13 && minutes == 45) return Icons.lunch_dining;
+    if (hours == 14 && minutes == 30) return Icons.work;
+    if (hours == 16 && minutes == 0) return Icons.refresh;
+    if (hours == 16 && minutes == 15) return Icons.work;
+    if (hours == 17 && minutes == 30) return Icons.mosque;
+    if (hours == 18 && minutes == 0) return Icons.weekend;
+    if (hours == 20 && minutes == 0) return Icons.fitness_center;
+    if (hours == 21 && minutes == 0) return Icons.dinner_dining;
     if (hours == 23 && minutes == 0) return Icons.book;
-    if (hours == 1 && minutes == 0) return Icons.bed;
     if (hours == 2 && minutes == 0) return Icons.bedtime;
     
     return Icons.access_time;
@@ -907,10 +899,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         Color timeColor;
         
         if (hours > 0) {
-          timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeString = '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}';
           timeColor = Colors.white;
         } else {
-          timeString = '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+          timeString = '${minutes.toString().padLeft(2, '0')} min';
           timeColor = minutes <= 5 ? const Color(0xFFFF9F0A) : Colors.white;
         }
         
@@ -1170,6 +1162,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         // Check if audio is ready to play
         if (_audioElement!.readyState >= 2) { // HAVE_CURRENT_DATA
           await _audioElement!.play();
+          return; // Success, no need for fallback
         } else {
           // If not ready, wait for it to be ready
           _audioElement!.onCanPlay.first.then((_) async {
@@ -1177,22 +1170,62 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               await _audioElement!.play();
             } catch (e) {
               print('Delayed play error: $e');
+              _playSynthesizedAirplaneSound(); // Fallback to synthesized
             }
           });
+          return;
         }
       } else {
         print('Audio element not initialized');
       }
     } catch (e) {
       print('Error playing airplane call sound: $e');
+    }
+    
+    // Fallback to synthesized sound
+    _playSynthesizedAirplaneSound();
+  }
+
+  void _playSynthesizedAirplaneSound() {
+    try {
+      final audioContext = js.JsObject(js.context['AudioContext']);
       
-      // Fallback: try to create a new audio element and play immediately
-      try {
-        final fallbackAudio = html.AudioElement('./assets/sounds/call_passesnger.mp3');
-        await fallbackAudio.play();
-      } catch (fallbackError) {
-        print('Fallback audio also failed: $fallbackError');
-      }
+      // Create airplane call button sound - two-tone chime
+      final oscillator1 = audioContext.callMethod('createOscillator');
+      final oscillator2 = audioContext.callMethod('createOscillator');
+      final gainNode = audioContext.callMethod('createGain');
+      final currentTime = audioContext['currentTime'];
+      
+      // First tone - higher pitch (E note - 659.25 Hz)
+      oscillator1['type'] = 'sine';
+      oscillator1['frequency'].callMethod('setValueAtTime', [659.25, currentTime]);
+      
+      // Second tone - lower pitch (C note - 523.25 Hz) 
+      oscillator2['type'] = 'sine';
+      oscillator2['frequency'].callMethod('setValueAtTime', [523.25, currentTime]);
+      
+      // Gain envelope for smooth sound
+      gainNode['gain'].callMethod('setValueAtTime', [0, currentTime]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.3, currentTime + 0.1]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.2, currentTime + 0.4]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0, currentTime + 0.8]);
+      
+      // Connect audio nodes
+      oscillator1.callMethod('connect', [gainNode]);
+      oscillator2.callMethod('connect', [gainNode]);
+      gainNode.callMethod('connect', [audioContext['destination']]);
+      
+      // Play the two-tone sequence
+      oscillator1.callMethod('start', [currentTime]);
+      oscillator1.callMethod('stop', [currentTime + 0.4]);
+      
+      oscillator2.callMethod('start', [currentTime + 0.4]);
+      oscillator2.callMethod('stop', [currentTime + 0.8]);
+      
+      print('Playing synthesized airplane sound');
+      
+    } catch (e) {
+      print('Error playing synthesized airplane sound: $e');
     }
   }
 

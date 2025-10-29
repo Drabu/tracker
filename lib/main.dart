@@ -618,10 +618,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 final now = snapshot.data ?? DateTime.now();
                 final todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
                 
-                // Check for habit changes and play sound
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _checkHabitChange();
-                });
+                // Check for habit changes and play sound (but only once per second instead of on every rebuild)
+                if (now.millisecond < 100) { // Only check during the first 100ms of each second
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _checkHabitChange();
+                  });
+                }
                 
                 return Column(
                   children: [
@@ -1279,8 +1281,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
     final newHabit = _getCurrentHabitInAction(todayIndex);
     
+    // Debug logging
+    print('Checking habit change: current="$_currentHabit", new="$newHabit", isIdle=$_isIdleMode');
+    
     if (newHabit != _currentHabit && _currentHabit.isNotEmpty) {
-      print('Habit changed from "$_currentHabit" to "$newHabit" - playing sound');
+      print('Habit changed from "$_currentHabit" to "$newHabit" - playing sound (screensaver: $_isIdleMode)');
       _playAirplaneCallSound();
     }
     

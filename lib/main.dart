@@ -1140,20 +1140,20 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       // Initialize cabin chime for habit changes
       _audioElement = html.AudioElement();
       _audioElement!.preload = 'auto';
-      _audioElement!.src = 'assets/sounds/cabin_chime.mp3';
+      _audioElement!.src = 'assets/assets/sounds/cabin_chime.mp3';
       
       // Initialize completion sounds
       _completedSoundElement = html.AudioElement();
       _completedSoundElement!.preload = 'auto';
-      _completedSoundElement!.src = 'assets/sounds/breach_lets_go.mp3';
+      _completedSoundElement!.src = 'assets/assets/sounds/breach_lets_go.mp3';
       
       _missedSoundElement = html.AudioElement();
       _missedSoundElement!.preload = 'auto';
-      _missedSoundElement!.src = 'assets/sounds/it_was_at_this_moment.mp3';
+      _missedSoundElement!.src = 'assets/assets/sounds/it_was_at_this_moment.mp3';
       
       _partialSoundElement = html.AudioElement();
       _partialSoundElement!.preload = 'auto';
-      _partialSoundElement!.src = 'assets/sounds/oh_hell_naw.mp3';
+      _partialSoundElement!.src = 'assets/assets/sounds/oh_hell_naw.mp3';
       
       // Add error handling for all audio elements
       _audioElement!.onError.listen((event) {

@@ -97,7 +97,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   final Map<String, List<String>> _categories = {
-    'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )': [
+    'Qabr ( Qafn-Darkness-Empty-Hands )': [
       'Quran',
       'Fajr',
       'Duhr',
@@ -149,7 +149,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   };
 
   final Set<String> _compoundingHabits = {
-    'Quran', 'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Evening Quran', // Preperation for Qabr ( Qafn-Darkness-Empty-Hands )
+    'Quran', 'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Evening Quran', // Qabr ( Qafn-Darkness-Empty-Hands )
     'Guitar', 'Book', // Personal  
     'Typing', 'Data Structures', // Professional
     'Gym', 'Water' // Health
@@ -2212,7 +2212,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildActivityRingsWidget(int dayIndex) {
-    final deenProgress = _getCategoryProgress('Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', dayIndex);
+    final deenProgress = _getCategoryProgress('Qabr ( Qafn-Darkness-Empty-Hands )', dayIndex);
     final personalProgress = _getCategoryProgress('Personal', dayIndex);
     final healthProgress = _getCategoryProgress('Health', dayIndex);
     final totalProgress = (deenProgress + personalProgress + healthProgress) / 3;
@@ -2389,7 +2389,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   // Progress indicators
                   Column(
                     children: [
-                      _buildProgressIndicator('Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', deenProgress, const Color(0xFFFF453A)),
+                      _buildProgressIndicator('Akhirat', deenProgress, const Color(0xFFFF453A)),
                       const SizedBox(height: 6),
                       _buildProgressIndicator('Personal', personalProgress, const Color(0xFF30D158)),
                       const SizedBox(height: 6),
@@ -3051,7 +3051,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildTodaysFocusSection(int dayIndex) {
     final focusCategories = [
-      {'name': 'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', 'color': const Color(0xFFFF453A)},
+      {'name': 'Akhirat', 'color': const Color(0xFFFF453A)},
       {'name': 'Personal', 'color': const Color(0xFF30D158)},
       {'name': 'Professional', 'color': const Color(0xFF007AFF)},
       {'name': 'Health', 'color': const Color(0xFF00C7BE)},
@@ -3988,7 +3988,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildCategoryProgressSection(int dayIndex) {
     final progressCategories = [
-      {'name': 'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', 'color': const Color(0xFFFF453A)},
+      {'name': 'Akhirat', 'color': const Color(0xFFFF453A)},
       {'name': 'Personal', 'color': const Color(0xFF30D158)},
       {'name': 'Professional', 'color': const Color(0xFF007AFF)},
       {'name': 'Health', 'color': const Color(0xFF00C7BE)},
@@ -4845,10 +4845,20 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  // Helper function to map display names to actual category names
+  String _getActualCategoryName(String displayName) {
+    switch (displayName) {
+      case 'Akhirat':
+        return 'Qabr ( Qafn-Darkness-Empty-Hands )';
+      default:
+        return displayName;
+    }
+  }
+
   // Individual Category Rings Widget
   Widget _buildIndividualCategoryRings(int dayIndex) {
     final categories = [
-      {'name': 'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', 'color': const Color(0xFFFF453A), 'title': 'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )'},
+      {'name': 'Akhirat', 'color': const Color(0xFFFF453A), 'title': 'Akhirat'},
       {'name': 'Personal', 'color': const Color(0xFF30D158), 'title': 'Personal'},
       {'name': 'Professional', 'color': const Color(0xFFFF9F0A), 'title': 'Professional'},
       {'name': 'Health', 'color': const Color(0xFF00C7BE), 'title': 'Health'},
@@ -4898,7 +4908,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               children: categories.asMap().entries.map((entry) {
                 int index = entry.key;
                 Map<String, dynamic> category = entry.value;
-                double progress = _getCategoryProgress(category['name'] as String, dayIndex);
+                double progress = _getCategoryProgress(_getActualCategoryName(category['name'] as String), dayIndex);
                 Color color = category['color'] as Color;
                 String title = category['title'] as String;
                 
@@ -5074,7 +5084,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   builder: (context, child) => _buildActivityRing(
                     radius: 85,
                     strokeWidth: 12,
-                    progress: _getCategoryProgress('Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', dayIndex) * _ringAnimation.value,
+                    progress: _getCategoryProgress('Qabr ( Qafn-Darkness-Empty-Hands )', dayIndex) * _ringAnimation.value,
                     color: const Color(0xFFFF453A), // Red ring
                   ),
                 ),
@@ -5222,8 +5232,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
             return _buildLegendItem(
               color: const Color(0xFFFF453A),
-              title: 'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )',
-              subtitle: '${(_getCategoryProgress('Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+              title: 'Akhirat',
+              subtitle: '${(_getCategoryProgress('Qabr ( Qafn-Darkness-Empty-Hands )', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
             );
           },
         ),
@@ -5600,14 +5610,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     
     Map<String, double> categoryProgress = {};
     Map<String, Color> categoryColors = {
-      'Preperation for Qabr ( Qafn-Darkness-Empty-Hands )': const Color(0xFFFF453A),
+      'Qabr ( Qafn-Darkness-Empty-Hands )': const Color(0xFFFF453A),
       'Personal': const Color(0xFF30D158),
       'Professional': const Color(0xFFFF9F0A),
       'Health': const Color(0xFF00C7BE),
     };
     
     // Calculate progress for each category
-    for (String category in ['Preperation for Qabr ( Qafn-Darkness-Empty-Hands )', 'Personal', 'Professional', 'Health']) {
+    for (String category in ['Qabr ( Qafn-Darkness-Empty-Hands )', 'Personal', 'Professional', 'Health']) {
       List<String> categoryHabits = _categories[category] ?? [];
       List<String> compoundingInCategory = categoryHabits.where((habit) => _compoundingHabits.contains(habit)).toList();
       

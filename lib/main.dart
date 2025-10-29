@@ -1179,18 +1179,31 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   void _playAirplaneCallSound() async {
     try {
+      // Ensure audio context is resumed (required by browser autoplay policy)
+      if (_audioContext == null) {
+        _audioContext = js.JsObject(js.context['AudioContext']);
+      }
+      
+      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
+        await _audioContext!.callMethod('resume');
+        _audioContextResumed = true;
+        print('AudioContext resumed for cabin chime');
+      }
+
       if (_audioElement != null) {
         _audioElement!.currentTime = 0; // Reset to beginning
         
         // Check if audio is ready to play
         if (_audioElement!.readyState >= 2) { // HAVE_CURRENT_DATA
           await _audioElement!.play();
+          print('Playing cabin chime for habit change');
           return; // Success, no need for fallback
         } else {
           // If not ready, wait for it to be ready
           _audioElement!.onCanPlay.first.then((_) async {
             try {
               await _audioElement!.play();
+              print('Playing cabin chime for habit change (delayed)');
             } catch (e) {
               print('Delayed play error: $e');
               _playSynthesizedAirplaneSound(); // Fallback to synthesized
@@ -1202,7 +1215,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         print('Audio element not initialized');
       }
     } catch (e) {
-      print('Error playing airplane call sound: $e');
+      print('Error playing cabin chime: $e');
     }
     
     // Fallback to synthesized sound

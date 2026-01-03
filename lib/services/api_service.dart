@@ -120,7 +120,7 @@ class ApiService {
   static Future<Timeline> saveTimeline({
     required String userId,
     required String date,
-    required List<TimelineEntry> entries,
+    required List<Event> entries,
   }) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/timelines'),
@@ -137,7 +137,7 @@ class ApiService {
     throw Exception('Failed to save timeline');
   }
 
-  static Future<Map<String, dynamic>> validateTimeline(List<TimelineEntry> entries) async {
+  static Future<Map<String, dynamic>> validateTimeline(List<Event> entries) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/timelines/validate'),
       headers: {'Content-Type': 'application/json'},

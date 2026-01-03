@@ -75,14 +75,6 @@ class _HabitListScreenState extends State<HabitListScreen> {
     }
   }
 
-  Map<String, List<Habit>> get _groupedHabits {
-    final Map<String, List<Habit>> grouped = {};
-    for (final habit in _habits) {
-      grouped.putIfAbsent(habit.category, () => []).add(habit);
-    }
-    return grouped;
-  }
-
   void _showAddHabitDialog() {
     final titleController = TextEditingController();
     final categoryController = TextEditingController();
@@ -300,82 +292,65 @@ class _HabitListScreenState extends State<HabitListScreen> {
                           )
                         : ListView.builder(
                             padding: const EdgeInsets.all(16),
-                            itemCount: _groupedHabits.keys.length,
+                            itemCount: _habits.length,
                             itemBuilder: (context, index) {
-                              final category = _groupedHabits.keys.elementAt(index);
-                              final habits = _groupedHabits[category]!;
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    child: Text(
-                                      category,
-                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: Theme.of(context).colorScheme.primary,
-                                          ),
-                                    ),
+                              final habit = _habits[index];
+                              return Card(
+                                child: ListTile(
+                                  leading: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Checkbox(
+                                        value: _compoundHabitIds.contains(habit.id),
+                                        onChanged: (value) => _toggleCompound(habit.id, value ?? false),
+                                        activeColor: const Color(0xFFFF9F0A),
+                                      ),
+                                      if (habit.icon.isNotEmpty)
+                                        Text(
+                                          habit.icon,
+                                          style: const TextStyle(fontSize: 24),
+                                        )
+                                      else
+                                        const Icon(Icons.check_circle_outline),
+                                    ],
                                   ),
-                                  ...habits.map((habit) => Card(
-                                        child: ListTile(
-                                          leading: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Checkbox(
-                                                value: _compoundHabitIds.contains(habit.id),
-                                                onChanged: (value) => _toggleCompound(habit.id, value ?? false),
-                                                activeColor: const Color(0xFFFF9F0A),
-                                              ),
-                                              if (habit.icon.isNotEmpty)
-                                                Text(
-                                                  habit.icon,
-                                                  style: const TextStyle(fontSize: 24),
-                                                )
-                                              else
-                                                const Icon(Icons.check_circle_outline),
-                                            ],
+                                  title: Row(
+                                    children: [
+                                      Expanded(child: Text(habit.title)),
+                                      if (_compoundHabitIds.contains(habit.id))
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFFF9F0A).withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(4),
                                           ),
-                                          title: Row(
-                                            children: [
-                                              Expanded(child: Text(habit.title)),
-                                              if (_compoundHabitIds.contains(habit.id))
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFFF9F0A).withValues(alpha: 0.2),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: const Text(
-                                                    'COMPOUND',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      fontWeight: FontWeight.bold,
-                                                      color: Color(0xFFFF9F0A),
-                                                    ),
-                                                  ),
-                                                ),
-                                            ],
+                                          child: const Text(
+                                            'COMPOUND',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFFFF9F0A),
+                                            ),
                                           ),
-                                          subtitle: habit.description.isNotEmpty
-                                              ? Text(habit.description)
-                                              : null,
-                                          trailing: widget.onHabitSelected != null
-                                              ? IconButton(
-                                                  icon: const Icon(Icons.add_circle),
-                                                  onPressed: () => widget.onHabitSelected!(habit),
-                                                )
-                                              : IconButton(
-                                                  icon: const Icon(Icons.edit),
-                                                  onPressed: () => _showEditHabitDialog(habit),
-                                                ),
-                                          onTap: widget.onHabitSelected != null
-                                              ? () => widget.onHabitSelected!(habit)
-                                              : () => _showEditHabitDialog(habit),
                                         ),
-                                      )),
-                                  const SizedBox(height: 16),
-                                ],
+                                    ],
+                                  ),
+                                  subtitle: habit.description.isNotEmpty
+                                      ? Text(habit.description)
+                                      : null,
+                                  trailing: widget.onHabitSelected != null
+                                      ? IconButton(
+                                          icon: const Icon(Icons.add_circle),
+                                          onPressed: () => widget.onHabitSelected!(habit),
+                                        )
+                                      : IconButton(
+                                          icon: const Icon(Icons.edit),
+                                          onPressed: () => _showEditHabitDialog(habit),
+                                        ),
+                                  onTap: widget.onHabitSelected != null
+                                      ? () => widget.onHabitSelected!(habit)
+                                      : () => _showEditHabitDialog(habit),
+                                ),
                               );
                             },
                           ),

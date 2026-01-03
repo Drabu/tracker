@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 import '../models/models.dart';
 
 class CalendarTimeline extends StatefulWidget {
-  final List<TimelineEntry> entries;
+  final List<Event> entries;
   final Map<String, Habit> habitsMap;
   final Function(int startMinutes, int endMinutes) onDragCreate;
-  final Function(TimelineEntry entry, int index) onEntryTap;
+  final Function(Event entry, int index) onEntryTap;
   final Function(int index, int newStartMinutes, int newEndMinutes)? onEntryResize;
   final Function(int index, int newStartMinutes, int newEndMinutes)? onEntryMove;
   final int startHour;
@@ -28,43 +28,12 @@ class CalendarTimeline extends StatefulWidget {
   State<CalendarTimeline> createState() => _CalendarTimelineState();
 }
 
-enum TimeSection {
-  morning(5 * 60, 12 * 60, 'Morning', Icons.wb_sunny_outlined),
-  afternoon(12 * 60, 17 * 60, 'Afternoon', Icons.wb_sunny),
-  evening(17 * 60, 24 * 60, 'Evening', Icons.nightlight_outlined);
-
-  final int startMinutes;
-  final int endMinutes;
-  final String label;
-  final IconData icon;
-
-  const TimeSection(this.startMinutes, this.endMinutes, this.label, this.icon);
-
-  static TimeSection getCurrentSection() {
-    final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
-    
-    if (currentMinutes >= evening.startMinutes) return evening;
-    if (currentMinutes >= afternoon.startMinutes) return afternoon;
-    return morning;
-  }
-
-  bool containsTime(int minutes) {
-    return minutes >= startMinutes && minutes < endMinutes;
-  }
-}
-
 class _CalendarTimelineState extends State<CalendarTimeline> {
   static const double hourHeight = 150.0;
   static const double timeGutterWidth = 56.0;
-  static const double nowIndicatorWidth = 8.0;
   static const double resizeHandleHeight = 12.0;
-  static const double sectionHeaderHeight = 48.0;
   
   final ScrollController _scrollController = ScrollController();
-  
-  // Section collapsed state
-  late Map<TimeSection, bool> _sectionExpanded;
   
   // Drag state for creating new entries
   bool _isDragging = false;
@@ -93,13 +62,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
   @override
   void initState() {
     super.initState();
-    final currentSection = TimeSection.getCurrentSection();
-    _sectionExpanded = {
-      TimeSection.morning: currentSection == TimeSection.morning,
-      TimeSection.afternoon: currentSection == TimeSection.afternoon,
-      TimeSection.evening: currentSection == TimeSection.evening,
-    };
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrentSection());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToCurrentTime());
   }
 
   @override
@@ -108,26 +71,12 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     super.dispose();
   }
 
-  void _scrollToCurrentSection() {
+  void _scrollToCurrentTime() {
     if (!_scrollController.hasClients) return;
     
-    final currentSection = TimeSection.getCurrentSection();
-    double offset = 0;
-    
-    for (final section in TimeSection.values) {
-      if (section == currentSection) {
-        final now = DateTime.now();
-        final currentMinutes = now.hour * 60 + now.minute;
-        final sectionOffset = (currentMinutes - section.startMinutes) / 60 * hourHeight;
-        offset += sectionOffset.clamp(0, double.infinity);
-        break;
-      }
-      if (_sectionExpanded[section] == true) {
-        final sectionHours = (section.endMinutes - section.startMinutes) / 60;
-        offset += sectionHours * hourHeight;
-      }
-      offset += sectionHeaderHeight;
-    }
+    final now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
+    final offset = (currentMinutes / 60) * hourHeight - 100;
     
     _scrollController.animateTo(
       offset.clamp(0, _scrollController.position.maxScrollExtent),
@@ -136,35 +85,17 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     );
   }
 
-  int _getMinutesFromY(double y, TimeSection section) {
-    final sectionRelativeY = y;
-    final totalMinutes = section.startMinutes + (sectionRelativeY / hourHeight * 60).round();
-    return ((totalMinutes / 5).round() * 5).clamp(section.startMinutes, section.endMinutes - 5);
+  int _getMinutesFromY(double y) {
+    final totalMinutes = (y / hourHeight * 60).round();
+    return ((totalMinutes / 5).round() * 5).clamp(0, 24 * 60 - 5);
   }
 
-  void _toggleSection(TimeSection section) {
-    HapticFeedback.lightImpact();
-    setState(() {
-      _sectionExpanded[section] = !(_sectionExpanded[section] ?? false);
-    });
-  }
-
-  List<TimelineEntry> _getEntriesForSection(TimeSection section) {
-    return widget.entries.where((e) {
-      return e.startMinutes >= section.startMinutes && e.startMinutes < section.endMinutes;
-    }).toList();
-  }
-
-  int _getPointsForSection(TimeSection section) {
-    return _getEntriesForSection(section).fold(0, (sum, e) => sum + e.points);
-  }
-
-  void _handleDragStart(DragStartDetails details, TimeSection section, double sectionStartY) {
+  void _handleDragStart(DragStartDetails details) {
     final RenderBox box = context.findRenderObject() as RenderBox;
     final localPosition = box.globalToLocal(details.globalPosition);
-    final y = localPosition.dy + _scrollController.offset - sectionStartY;
+    final y = localPosition.dy + _scrollController.offset;
     
-    final minutes = _getMinutesFromY(y, section);
+    final minutes = _getMinutesFromY(y);
     
     for (int i = 0; i < widget.entries.length; i++) {
       final entry = widget.entries[i];
@@ -181,14 +112,14 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     });
   }
 
-  void _handleDragUpdate(DragUpdateDetails details, TimeSection section, double sectionStartY) {
+  void _handleDragUpdate(DragUpdateDetails details) {
     if (!_isDragging || _dragStartMinutes == null) return;
     
     final RenderBox box = context.findRenderObject() as RenderBox;
     final localPosition = box.globalToLocal(details.globalPosition);
-    final y = localPosition.dy + _scrollController.offset - sectionStartY;
+    final y = localPosition.dy + _scrollController.offset;
     
-    final minutes = _getMinutesFromY(y, section);
+    final minutes = _getMinutesFromY(y);
     
     setState(() {
       _dragEndMinutes = minutes;
@@ -241,13 +172,13 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     });
   }
 
-  void _handleResizeUpdate(DragUpdateDetails details, TimeSection section, double sectionStartY) {
+  void _handleResizeUpdate(DragUpdateDetails details) {
     if (!_isResizing || _resizingIndex == null) return;
     
     final RenderBox box = context.findRenderObject() as RenderBox;
     final localPosition = box.globalToLocal(details.globalPosition);
-    final y = localPosition.dy + _scrollController.offset - sectionStartY;
-    final minutes = _getMinutesFromY(y, section);
+    final y = localPosition.dy + _scrollController.offset;
+    final minutes = _getMinutesFromY(y);
     
     setState(() {
       if (_resizingTop) {
@@ -259,21 +190,9 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
   }
 
   void _handleResizeEnd() {
-    if (!_isResizing || _resizingIndex == null) {
-      _resetResize();
-      return;
+    if (_resizingIndex != null && _resizeStartMinutes != null && _resizeEndMinutes != null) {
+      widget.onEntryResize?.call(_resizingIndex!, _resizeStartMinutes!, _resizeEndMinutes!);
     }
-    
-    final index = _resizingIndex!;
-    final startMin = _resizeStartMinutes!;
-    final endMin = _resizeEndMinutes!;
-    
-    HapticFeedback.mediumImpact();
-    widget.onEntryResize?.call(index, startMin, endMin);
-    _resetResize();
-  }
-
-  void _resetResize() {
     setState(() {
       _isResizing = false;
       _resizingIndex = null;
@@ -282,7 +201,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     });
   }
 
-  void _handleMoveStart(int index, double globalY) {
+  void _handleMoveStart(int index, DragStartDetails details) {
     final entry = widget.entries[index];
     HapticFeedback.lightImpact();
     setState(() {
@@ -290,38 +209,22 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
       _movingIndex = index;
       _moveStartMinutes = entry.startMinutes;
       _moveEndMinutes = entry.endMinutes;
-      
-      final RenderBox box = context.findRenderObject() as RenderBox;
-      final localY = box.globalToLocal(Offset(0, globalY)).dy + _scrollController.offset;
-      _moveDragStartY = localY.round();
+      _moveDragStartY = details.globalPosition.dy.round();
     });
   }
 
   void _handleMoveUpdate(DragUpdateDetails details) {
-    if (!_isMoving || _movingIndex == null) return;
-    
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final localPosition = box.globalToLocal(details.globalPosition);
-    final currentY = localPosition.dy + _scrollController.offset;
+    if (!_isMoving || _movingIndex == null || _moveDragStartY == null) return;
     
     final entry = widget.entries[_movingIndex!];
-    final duration = entry.endMinutes - entry.startMinutes;
-    
-    final deltaY = currentY - _moveDragStartY!;
+    final deltaY = details.globalPosition.dy - _moveDragStartY!;
     final deltaMinutes = ((deltaY / hourHeight) * 60).round();
     final snappedDelta = (deltaMinutes / 5).round() * 5;
     
-    var newStart = entry.startMinutes + snappedDelta;
-    var newEnd = entry.endMinutes + snappedDelta;
-    
-    if (newStart < 0) {
-      newStart = 0;
-      newEnd = duration;
-    }
-    if (newEnd > 24 * 60) {
-      newEnd = 24 * 60;
-      newStart = newEnd - duration;
-    }
+    final duration = entry.durationMinutes;
+    int newStart = entry.startMinutes + snappedDelta;
+    newStart = newStart.clamp(0, 24 * 60 - duration);
+    final newEnd = newStart + duration;
     
     setState(() {
       _moveStartMinutes = newStart;
@@ -330,21 +233,9 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
   }
 
   void _handleMoveEnd() {
-    if (!_isMoving || _movingIndex == null) {
-      _resetMove();
-      return;
+    if (_movingIndex != null && _moveStartMinutes != null && _moveEndMinutes != null) {
+      widget.onEntryMove?.call(_movingIndex!, _moveStartMinutes!, _moveEndMinutes!);
     }
-    
-    final index = _movingIndex!;
-    final startMin = _moveStartMinutes!;
-    final endMin = _moveEndMinutes!;
-    
-    HapticFeedback.mediumImpact();
-    widget.onEntryMove?.call(index, startMin, endMin);
-    _resetMove();
-  }
-
-  void _resetMove() {
     setState(() {
       _isMoving = false;
       _movingIndex = null;
@@ -356,178 +247,42 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.only(bottom: 100),
-      itemCount: TimeSection.values.length,
-      itemBuilder: (context, index) {
-        final section = TimeSection.values[index];
-        return _buildSection(section);
-      },
-    );
-  }
-
-  Widget _buildSection(TimeSection section) {
-    final isExpanded = _sectionExpanded[section] ?? false;
-    final entries = _getEntriesForSection(section);
-    final sectionPoints = _getPointsForSection(section);
-    final currentSection = TimeSection.getCurrentSection();
-    final isCurrent = section == currentSection;
+    final totalHeight = 24 * hourHeight;
     
-    final sectionHours = (section.endMinutes - section.startMinutes) / 60;
-    final sectionHeight = sectionHours * hourHeight;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Section header
-        InkWell(
-          onTap: () => _toggleSection(section),
-          child: Container(
-            height: sectionHeaderHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: isCurrent 
-                  ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
-                  : Colors.grey.shade900,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.shade800, width: 0.5),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  section.icon,
-                  size: 20,
-                  color: isCurrent 
-                      ? Theme.of(context).colorScheme.primary 
-                      : Colors.grey.shade400,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        section.label,
-                        style: TextStyle(
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
-                          fontSize: 15,
-                          color: isCurrent 
-                              ? Theme.of(context).colorScheme.primary 
-                              : Colors.white,
-                        ),
-                      ),
-                      Text(
-                        '${_formatMinutes(section.startMinutes)} - ${_formatMinutes(section.endMinutes)}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (entries.isNotEmpty) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${entries.length} items • $sectionPoints pts',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                AnimatedRotation(
-                  turns: isExpanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 200),
-                  child: Icon(
-                    Icons.keyboard_arrow_down,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        
-        // Section content
-        AnimatedCrossFade(
-          firstChild: const SizedBox(width: double.infinity, height: 0),
-          secondChild: _buildSectionContent(section, sectionHeight),
-          crossFadeState: isExpanded 
-              ? CrossFadeState.showSecond 
-              : CrossFadeState.showFirst,
-          duration: const Duration(milliseconds: 200),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSectionContent(TimeSection section, double sectionHeight) {
     return GestureDetector(
       onLongPressStart: (details) {
-        _handleDragStart(
-          DragStartDetails(globalPosition: details.globalPosition),
-          section,
-          _getSectionStartY(section),
-        );
+        _handleDragStart(DragStartDetails(globalPosition: details.globalPosition));
       },
       onLongPressMoveUpdate: (details) {
-        _handleDragUpdate(
-          DragUpdateDetails(globalPosition: details.globalPosition, delta: Offset.zero),
-          section,
-          _getSectionStartY(section),
-        );
+        _handleDragUpdate(DragUpdateDetails(globalPosition: details.globalPosition, delta: Offset.zero));
       },
       onLongPressEnd: (details) {
         _handleDragEnd(DragEndDetails());
       },
-      child: SizedBox(
-        height: sectionHeight,
-        child: Stack(
-          children: [
-            ..._buildHourLinesForSection(section),
-            ..._buildEntriesForSection(section),
-            if (section == TimeSection.getCurrentSection())
-              _buildCurrentTimeIndicator(section),
-            if (_isDragging && _dragStartMinutes != null && _dragEndMinutes != null)
-              _buildDragSelection(section),
-          ],
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.only(bottom: 100),
+        child: SizedBox(
+          height: totalHeight,
+          child: Stack(
+            children: [
+              ..._buildHourLines(),
+              ..._buildEntries(),
+              _buildCurrentTimeIndicator(),
+              if (_isDragging && _dragStartMinutes != null && _dragEndMinutes != null)
+                _buildDragSelection(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  double _getSectionStartY(TimeSection section) {
-    double offset = 0;
-    for (final s in TimeSection.values) {
-      offset += sectionHeaderHeight;
-      if (s == section) break;
-      if (_sectionExpanded[s] == true) {
-        final sectionHours = (s.endMinutes - s.startMinutes) / 60;
-        offset += sectionHours * hourHeight;
-      }
-    }
-    return offset;
-  }
-
-  List<Widget> _buildHourLinesForSection(TimeSection section) {
+  List<Widget> _buildHourLines() {
     final List<Widget> lines = [];
-    final startHour = section.startMinutes ~/ 60;
-    final endHour = section.endMinutes ~/ 60;
     
-    for (int hour = startHour; hour <= endHour; hour++) {
-      final y = (hour - startHour) * hourHeight;
+    for (int hour = 0; hour <= 24; hour++) {
+      final y = hour * hourHeight;
       final isCurrentHour = DateTime.now().hour == hour;
       
       lines.add(
@@ -545,6 +300,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                     hour == 0 ? '12 AM' :
                     hour < 12 ? '$hour AM' :
                     hour == 12 ? '12 PM' :
+                    hour == 24 ? '12 AM' :
                     '${hour - 12} PM',
                     textAlign: TextAlign.right,
                     style: TextStyle(
@@ -572,33 +328,29 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     return lines;
   }
 
-  Widget _buildCurrentTimeIndicator(TimeSection section) {
+  Widget _buildCurrentTimeIndicator() {
     final now = DateTime.now();
     final currentMinutes = now.hour * 60 + now.minute;
-    final y = (currentMinutes - section.startMinutes) / 60 * hourHeight;
-    
-    if (y < 0 || y > (section.endMinutes - section.startMinutes) / 60 * hourHeight) {
-      return const SizedBox.shrink();
-    }
+    final y = (currentMinutes / 60) * hourHeight;
     
     return Positioned(
-      left: timeGutterWidth - nowIndicatorWidth / 2,
-      top: y - nowIndicatorWidth / 2,
+      left: timeGutterWidth - 4,
+      top: y - 4,
       right: 0,
       child: Row(
         children: [
           Container(
-            width: nowIndicatorWidth,
-            height: nowIndicatorWidth,
-            decoration: const BoxDecoration(
-              color: Colors.red,
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
               shape: BoxShape.circle,
             ),
           ),
           Expanded(
             child: Container(
               height: 2,
-              color: Colors.red,
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
         ],
@@ -606,51 +358,37 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     );
   }
 
-  List<Widget> _buildEntriesForSection(TimeSection section) {
+  List<Widget> _buildEntries() {
     final List<Widget> widgets = [];
     
-    for (int index = 0; index < widget.entries.length; index++) {
-      final entry = widget.entries[index];
-      
-      if (entry.startMinutes < section.startMinutes || entry.startMinutes >= section.endMinutes) {
-        continue;
-      }
-      
+    for (int i = 0; i < widget.entries.length; i++) {
+      final entry = widget.entries[i];
       final habit = widget.habitsMap[entry.habitId];
+      final index = i;
       
       final isBeingResized = _isResizing && _resizingIndex == index;
       final isBeingMoved = _isMoving && _movingIndex == index;
-      
-      int displayStartMinutes;
-      int displayEndMinutes;
-      
-      if (isBeingMoved) {
-        displayStartMinutes = _moveStartMinutes!;
-        displayEndMinutes = _moveEndMinutes!;
-      } else if (isBeingResized) {
-        displayStartMinutes = _resizeStartMinutes!;
-        displayEndMinutes = _resizeEndMinutes!;
-      } else {
-        displayStartMinutes = entry.startMinutes;
-        displayEndMinutes = entry.endMinutes;
-      }
-      
-      final displayDuration = displayEndMinutes - displayStartMinutes;
-      
-      final startY = (displayStartMinutes - section.startMinutes) / 60 * hourHeight;
-      final naturalHeight = displayDuration / 60 * hourHeight;
-      final height = naturalHeight.clamp(10.0, double.infinity);
-      
-      final isHovered = _hoveredEntryIndex == index;
       final isActive = isBeingResized || isBeingMoved;
-      final categoryColor = _getCategoryColor(habit?.category ?? '');
+      
+      final displayStartMinutes = isBeingResized 
+          ? _resizeStartMinutes! 
+          : (isBeingMoved ? _moveStartMinutes! : entry.startMinutes);
+      final displayEndMinutes = isBeingResized 
+          ? _resizeEndMinutes! 
+          : (isBeingMoved ? _moveEndMinutes! : entry.endMinutes);
+      
+      final startY = (displayStartMinutes / 60) * hourHeight;
+      final height = ((displayEndMinutes - displayStartMinutes) / 60 * hourHeight).clamp(20.0, double.infinity);
+      
+      final color = _getCategoryColor(habit?.category ?? 'default');
+      final isHovered = _hoveredEntryIndex == index;
       
       widgets.add(
         Positioned(
           left: timeGutterWidth + 4,
-          top: startY + 1,
+          top: startY,
           right: 8,
-          height: height - 2,
+          height: height,
           child: MouseRegion(
             onEnter: (_) => setState(() => _hoveredEntryIndex = index),
             onExit: (_) => setState(() {
@@ -658,196 +396,203 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
               _hoveringTop = false;
               _hoveringBottom = false;
             }),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    onTap: () => widget.onEntryTap(entry, index),
-                    onLongPressStart: (details) => _handleMoveStart(index, details.globalPosition.dy),
-                    onLongPressMoveUpdate: (details) => _handleMoveUpdate(DragUpdateDetails(
-                      globalPosition: details.globalPosition,
-                      delta: Offset.zero,
-                    )),
-                    onLongPressEnd: (_) => _handleMoveEnd(),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: categoryColor.withValues(alpha: isBeingMoved ? 0.7 : 0.9),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isActive ? Colors.white : categoryColor,
-                          width: isActive ? 2 : 1,
-                        ),
-                        boxShadow: isBeingMoved ? [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ] : null,
+            child: GestureDetector(
+              onTap: () => widget.onEntryTap(entry, index),
+              onVerticalDragStart: (details) => _handleMoveStart(index, details),
+              onVerticalDragUpdate: (details) => _handleMoveUpdate(details),
+              onVerticalDragEnd: (_) => _handleMoveEnd(),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 100),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: isActive ? 0.9 : 0.85),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isActive 
+                            ? Colors.white 
+                            : color.withValues(alpha: 0.3),
+                        width: isActive ? 2 : 1,
                       ),
-                      padding: EdgeInsets.symmetric(horizontal: height < 30 ? 4 : 8, vertical: height < 30 ? 2 : 4),
-                      child: height < 30
-                          ? Row(
-                              children: [
-                                if (habit?.icon.isNotEmpty == true)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 4),
-                                    child: Text(habit!.icon, style: const TextStyle(fontSize: 12)),
-                                  ),
-                                Expanded(
-                                  child: Text(
-                                    habit?.title ?? entry.habitName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 11,
-                                      color: Colors.white,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  isActive 
-                                      ? '${_formatMinutes(displayStartMinutes)}-${_formatMinutes(displayEndMinutes)}'
-                                      : '${entry.startTimeFormatted}-${entry.endTimeFormatted}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${entry.points}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                      boxShadow: isActive ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                          spreadRadius: 2,
+                        ),
+                      ] : null,
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => widget.onEntryTap(entry, index),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: height < 30 ? 4 : 8, vertical: height < 30 ? 2 : 4),
+                          child: height < 30
+                              ? Row(
                                   children: [
                                     if (habit?.icon.isNotEmpty == true)
                                       Padding(
                                         padding: const EdgeInsets.only(right: 4),
-                                        child: Text(habit!.icon, style: const TextStyle(fontSize: 14)),
+                                        child: Text(habit!.icon, style: const TextStyle(fontSize: 12)),
                                       ),
                                     Expanded(
                                       child: Text(
                                         habit?.title ?? entry.habitName,
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w600,
-                                          fontSize: 13,
+                                          fontSize: 11,
                                           color: Colors.white,
                                         ),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black26,
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Text(
-                                        '${entry.points}',
-                                        style: const TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (height > 40)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 2),
-                                    child: Text(
+                                    const SizedBox(width: 4),
+                                    Text(
                                       isActive 
-                                          ? '${_formatMinutes(displayStartMinutes)} - ${_formatMinutes(displayEndMinutes)}'
-                                          : '${entry.startTimeFormatted} - ${entry.endTimeFormatted}',
+                                          ? '${_formatMinutes(displayStartMinutes)}-${_formatMinutes(displayEndMinutes)}'
+                                          : '${entry.startTimeFormatted}-${entry.endTimeFormatted}',
                                       style: TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 10,
                                         color: Colors.white.withValues(alpha: 0.8),
                                       ),
                                     ),
-                                  ),
-                              ],
-                            ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${entry.points}',
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        if (habit?.icon.isNotEmpty == true)
+                                          Padding(
+                                            padding: const EdgeInsets.only(right: 4),
+                                            child: Text(habit!.icon, style: const TextStyle(fontSize: 14)),
+                                          ),
+                                        Expanded(
+                                          child: Text(
+                                            habit?.title ?? entry.habitName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 13,
+                                              color: Colors.white,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black26,
+                                            borderRadius: BorderRadius.circular(10),
+                                          ),
+                                          child: Text(
+                                            '${entry.points}',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (height > 40)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Text(
+                                          isActive 
+                                              ? '${_formatMinutes(displayStartMinutes)} - ${_formatMinutes(displayEndMinutes)}'
+                                              : '${entry.startTimeFormatted} - ${entry.endTimeFormatted}',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white.withValues(alpha: 0.8),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-                
-                // Top resize handle
-                if (isHovered || isBeingResized)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    top: -resizeHandleHeight / 2,
-                    height: resizeHandleHeight,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.resizeRow,
-                      onEnter: (_) => setState(() => _hoveringTop = true),
-                      onExit: (_) => setState(() => _hoveringTop = false),
-                      child: GestureDetector(
-                        onVerticalDragStart: (details) => _handleResizeStart(index, true, details.globalPosition.dy),
-                        onVerticalDragUpdate: (details) => _handleResizeUpdate(details, section, _getSectionStartY(section)),
-                        onVerticalDragEnd: (_) => _handleResizeEnd(),
-                        child: Center(
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: _hoveringTop || (isBeingResized && _resizingTop) ? 48 : 32,
-                            height: _hoveringTop || (isBeingResized && _resizingTop) ? 6 : 4,
-                            decoration: BoxDecoration(
-                              color: _hoveringTop || (isBeingResized && _resizingTop)
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(3),
+                  
+                  // Top resize handle
+                  if (isHovered || isBeingResized)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: -resizeHandleHeight / 2,
+                      height: resizeHandleHeight,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeRow,
+                        onEnter: (_) => setState(() => _hoveringTop = true),
+                        onExit: (_) => setState(() => _hoveringTop = false),
+                        child: GestureDetector(
+                          onVerticalDragStart: (details) => _handleResizeStart(index, true, details.globalPosition.dy),
+                          onVerticalDragUpdate: (details) => _handleResizeUpdate(details),
+                          onVerticalDragEnd: (_) => _handleResizeEnd(),
+                          child: Center(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: _hoveringTop || (isBeingResized && _resizingTop) ? 48 : 32,
+                              height: _hoveringTop || (isBeingResized && _resizingTop) ? 6 : 4,
+                              decoration: BoxDecoration(
+                                color: _hoveringTop || (isBeingResized && _resizingTop)
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                
-                // Bottom resize handle
-                if (isHovered || isBeingResized)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: -resizeHandleHeight / 2,
-                    height: resizeHandleHeight,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.resizeRow,
-                      onEnter: (_) => setState(() => _hoveringBottom = true),
-                      onExit: (_) => setState(() => _hoveringBottom = false),
-                      child: GestureDetector(
-                        onVerticalDragStart: (details) => _handleResizeStart(index, false, details.globalPosition.dy),
-                        onVerticalDragUpdate: (details) => _handleResizeUpdate(details, section, _getSectionStartY(section)),
-                        onVerticalDragEnd: (_) => _handleResizeEnd(),
-                        child: Center(
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: _hoveringBottom || (isBeingResized && !_resizingTop) ? 48 : 32,
-                            height: _hoveringBottom || (isBeingResized && !_resizingTop) ? 6 : 4,
-                            decoration: BoxDecoration(
-                              color: _hoveringBottom || (isBeingResized && !_resizingTop)
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.6),
-                              borderRadius: BorderRadius.circular(3),
+                  
+                  // Bottom resize handle
+                  if (isHovered || isBeingResized)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: -resizeHandleHeight / 2,
+                      height: resizeHandleHeight,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.resizeRow,
+                        onEnter: (_) => setState(() => _hoveringBottom = true),
+                        onExit: (_) => setState(() => _hoveringBottom = false),
+                        child: GestureDetector(
+                          onVerticalDragStart: (details) => _handleResizeStart(index, false, details.globalPosition.dy),
+                          onVerticalDragUpdate: (details) => _handleResizeUpdate(details),
+                          onVerticalDragEnd: (_) => _handleResizeEnd(),
+                          child: Center(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: _hoveringBottom || (isBeingResized && !_resizingTop) ? 48 : 32,
+                              height: _hoveringBottom || (isBeingResized && !_resizingTop) ? 6 : 4,
+                              decoration: BoxDecoration(
+                                color: _hoveringBottom || (isBeingResized && !_resizingTop)
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -857,13 +602,9 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     return widgets;
   }
 
-  Widget _buildDragSelection(TimeSection section) {
+  Widget _buildDragSelection() {
     int startMin = _dragStartMinutes!;
     int endMin = _dragEndMinutes!;
-    
-    if (startMin < section.startMinutes || startMin >= section.endMinutes) {
-      return const SizedBox.shrink();
-    }
     
     if (endMin < startMin) {
       final temp = startMin;
@@ -871,7 +612,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
       endMin = temp;
     }
     
-    final startY = (startMin - section.startMinutes) / 60 * hourHeight;
+    final startY = (startMin / 60) * hourHeight;
     final height = ((endMin - startMin) / 60 * hourHeight).clamp(15.0, double.infinity);
     
     return Positioned(

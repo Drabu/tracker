@@ -88,34 +88,36 @@ enum CompletionStatus {
   avoided
 }
 
-class TimelineEntry {
+class Event {
   final String id;
-  final String habitId;
-  final String habitName;
+  final Habit habit;
   final int startMinutes;
   final int durationMinutes;
   final int points;
   final CompletionStatus completionStatus;
+  final String? notes;
 
-  TimelineEntry({
+  Event({
     required this.id,
-    required this.habitId,
-    this.habitName = '',
+    required this.habit,
     required this.startMinutes,
     required this.durationMinutes,
     required this.points,
     this.completionStatus = CompletionStatus.none,
+    this.notes,
   });
 
-  factory TimelineEntry.fromJson(Map<String, dynamic> json) {
-    return TimelineEntry(
+  factory Event.fromJson(Map<String, dynamic> json) {
+    return Event(
       id: json['id'] ?? '',
-      habitId: json['habitId'] ?? '',
-      habitName: json['habitName'] ?? '',
+      habit: json['habit'] != null 
+          ? Habit.fromJson(json['habit']) 
+          : Habit(id: json['habitId'] ?? '', title: json['habitName'] ?? '', category: ''),
       startMinutes: json['startMinutes'] ?? 0,
       durationMinutes: json['durationMinutes'] ?? 0,
       points: json['points'] ?? 0,
       completionStatus: _parseCompletionStatus(json['completionStatus']),
+      notes: json['notes'],
     );
   }
 
@@ -161,32 +163,33 @@ class TimelineEntry {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'habitId': habitId,
-      'habitName': habitName,
+      'habitId': habit.id,
+      'habit': habit.toJson(),
       'startMinutes': startMinutes,
       'durationMinutes': durationMinutes,
       'points': points,
       'completionStatus': _completionStatusToString(completionStatus),
+      'notes': notes,
     };
   }
 
-  TimelineEntry copyWith({
+  Event copyWith({
     String? id,
-    String? habitId,
-    String? habitName,
+    Habit? habit,
     int? startMinutes,
     int? durationMinutes,
     int? points,
     CompletionStatus? completionStatus,
+    String? notes,
   }) {
-    return TimelineEntry(
+    return Event(
       id: id ?? this.id,
-      habitId: habitId ?? this.habitId,
-      habitName: habitName ?? this.habitName,
+      habit: habit ?? this.habit,
       startMinutes: startMinutes ?? this.startMinutes,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       points: points ?? this.points,
       completionStatus: completionStatus ?? this.completionStatus,
+      notes: notes ?? this.notes,
     );
   }
 
@@ -209,13 +212,21 @@ class TimelineEntry {
       return '${mins}m';
     }
   }
+
+  // Convenience getters to maintain backward compatibility
+  String get habitId => habit.id;
+  String get habitName => habit.title;
 }
+
+// Deprecated: Use Event instead. Kept for backward compatibility during migration.
+@Deprecated('Use Event instead')
+typedef TimelineEntry = Event;
 
 class Timeline {
   final String id;
   final String userId;
   final String date;
-  final List<TimelineEntry> entries;
+  final List<Event> entries;
 
   Timeline({
     required this.id,
@@ -230,7 +241,7 @@ class Timeline {
       userId: json['userId'] ?? '',
       date: json['date'] ?? '',
       entries: (json['entries'] as List<dynamic>?)
-              ?.map((e) => TimelineEntry.fromJson(e))
+              ?.map((e) => Event.fromJson(e))
               .toList() ??
           [],
     );

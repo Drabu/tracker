@@ -16,7 +16,7 @@ class TimelineScreen extends StatefulWidget {
 }
 
 class _TimelineScreenState extends State<TimelineScreen> {
-  List<TimelineEntry> _entries = [];
+  List<Event> _entries = [];
   Map<String, Habit> _habitsMap = {};
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = true;
@@ -124,10 +124,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
     if (confirmed != true || !mounted) return;
     
     try {
-      final duplicatedEntries = _entries.map((e) => TimelineEntry(
+      final duplicatedEntries = _entries.map((e) => Event(
         id: DateTime.now().millisecondsSinceEpoch.toString() + e.habitId,
-        habitId: e.habitId,
-        habitName: e.habitName,
+        habit: e.habit,
         startMinutes: e.startMinutes,
         durationMinutes: e.durationMinutes,
         points: e.points,
@@ -282,10 +281,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                 onPressed: points <= _remainingPoints && isValidDuration
                     ? () {
                         setState(() {
-                          _entries.add(TimelineEntry(
+                          _entries.add(Event(
                             id: DateTime.now().millisecondsSinceEpoch.toString(),
-                            habitId: habit.id,
-                            habitName: habit.title,
+                            habit: habit,
                             startMinutes: startHour * 60 + startMinute,
                             durationMinutes: duration,
                             points: points,
@@ -317,7 +315,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
     }
   }
 
-  void _showEditEntryDialog(TimelineEntry entry, int index) {
+  void _showEditEntryDialog(Event entry, int index) {
     int points = entry.points;
     int startHour = entry.startHour;
     int startMinute = entry.startMinute;
@@ -555,10 +553,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                 onPressed: points <= _remainingPoints
                     ? () {
                         setState(() {
-                          _entries.add(TimelineEntry(
+                          _entries.add(Event(
                             id: DateTime.now().millisecondsSinceEpoch.toString(),
-                            habitId: habit.id,
-                            habitName: habit.title,
+                            habit: habit,
                             startMinutes: startMinutes,
                             durationMinutes: duration,
                             points: points,

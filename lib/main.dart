@@ -36,6 +36,9 @@ class DailyTrackerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Daily Tracker',
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        scrollbars: false,
+      ),
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0D1117),
         cardColor: const Color(0xFF161B22),
@@ -116,6 +119,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   js.JsObject? _audioContext;
   html.AudioElement? _audioElement;
   bool _audioContextResumed = false;
+  
+  // Schedule section expansion states
+  final Map<String, bool> _scheduleSectionExpanded = {
+    'Morning': false,
+    'Afternoon': false,
+    'Evening': false,
+  };
   
   // Audio elements for different sounds
   html.AudioElement? _completedSoundElement;
@@ -1784,6 +1794,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   Future<void> _updateTimelineEntryStatus(TimelineEntry entry, CompletionStatus status) async {
     if (_currentTimeline == null) return;
     
+    // Optimistic UI update - update immediately before API call
+    final entryIndex = _timelineEntries.indexWhere((e) => e.id == entry.id);
+    if (entryIndex != -1) {
+      setState(() {
+        _timelineEntries[entryIndex] = entry.copyWith(completionStatus: status);
+      });
+    }
+    
+    // Play sound for completion states
+    _playCompletionSound(_completionStatusToHabitState(status));
+    
     try {
       final updatedTimeline = await ApiService.updateEntryStatus(
         timelineId: _currentTimeline!.id,
@@ -1805,6 +1826,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       }
     } catch (e) {
       print('Error updating entry status: $e');
+      // Revert optimistic update on error
+      if (entryIndex != -1) {
+        setState(() {
+          _timelineEntries[entryIndex] = entry;
+        });
+      }
     }
   }
   
@@ -2904,24 +2931,25 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     int onTimeHabits = 0;
     int partialHabits = 0;
     
-    for (var category in _categories.entries) {
-      for (String habit in category.value) {
-        if (!_isHabitDisabled(habit, dayIndex)) {
-          totalHabits++;
-          HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-          if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
-            totalCompleted++;
-            if (state == HabitState.onTime) onTimeHabits++;
-            if (state == HabitState.partial) partialHabits++;
-          }
-        }
+    // Use timeline entries (schedule data) for stats
+    totalHabits = _timelineEntries.length;
+    for (var entry in _timelineEntries) {
+      final status = entry.completionStatus;
+      if (status == CompletionStatus.completed || 
+          status == CompletionStatus.onTime || 
+          status == CompletionStatus.delayed || 
+          status == CompletionStatus.partial ||
+          status == CompletionStatus.avoided) {
+        totalCompleted++;
+        if (status == CompletionStatus.onTime) onTimeHabits++;
+        if (status == CompletionStatus.partial) partialHabits++;
       }
     }
     
     double completionRate = totalHabits > 0 ? totalCompleted / totalHabits : 0.0;
     
     return Container(
-      padding: const EdgeInsets.all(28),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -2931,16 +2959,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             const Color(0xFF1E212E).withValues(alpha: 0.85),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.15),
-          width: 1.5,
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -2952,7 +2980,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               Text(
                 'TODAY\'S PERFORMANCE',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: FontWeight.w700,
                   color: Colors.white.withValues(alpha: 0.7),
                   letterSpacing: 0.8,
@@ -2993,7 +3021,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           // Main completion stats
           Row(
             children: [
@@ -3005,7 +3033,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   icon: Icons.check_circle,
                 ),
               ),
-              const SizedBox(width: 20),
+              const SizedBox(width: 12),
               Expanded(
                 child: _buildStatItem(
                   value: totalHabits - totalCompleted,
@@ -3016,7 +3044,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           // Completion rate indicator
           Row(
             children: [
@@ -3032,14 +3060,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                           builder: (context, animatedRate, child) => Text(
                             '${animatedRate.toInt()}%',
                             style: const TextStyle(
-                              fontSize: 28,
+                              fontSize: 22,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                               letterSpacing: -1,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 6),
                         TweenAnimationBuilder<double>(
                           duration: const Duration(seconds: 2),
                           tween: Tween(begin: 0.7, end: 1.0),
@@ -3049,7 +3077,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                             child: Icon(
                               completionRate >= 0.8 ? Icons.celebration : Icons.trending_up,
                               color: completionRate >= 0.8 ? const Color(0xFFFFD700) : const Color(0xFF00C7BE),
-                              size: 20,
+                              size: 16,
                             ),
                           ),
                           onEnd: () => setState(() {}),
@@ -3069,13 +3097,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   ],
                 ),
               ),
-              const SizedBox(width: 20),
+              const SizedBox(width: 12),
               // Progress bar
               Expanded(
                 child: Column(
                   children: [
                     Container(
-                      height: 8,
+                      height: 6,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
@@ -3126,7 +3154,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         });
       },
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -3136,16 +3164,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               const Color(0xFF1E212E).withValues(alpha: 0.85),
             ],
           ),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.15),
-            width: 1.5,
+            width: 1,
           ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -3153,15 +3181,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           children: [
             // Left side - Icon
             Container(
-              width: 50,
-              height: 50,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: const Color(0xFF5856D6),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF5856D6).withValues(alpha: 0.3),
-                    blurRadius: 8,
+                    blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -3169,11 +3197,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               child: Icon(
                 Icons.visibility,
                 color: Colors.white,
-                size: 24,
+                size: 20,
               ),
             ),
             
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             
             // Right side - Description
             Expanded(
@@ -3183,17 +3211,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   Text(
                     'Focus Mode',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: Colors.white.withValues(alpha: 0.9),
                       letterSpacing: 0.3,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     'View current habit in full screen focus',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.white.withValues(alpha: 0.6),
                       letterSpacing: 0.2,
                     ),
@@ -3221,10 +3249,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: color.withValues(alpha: 0.2),
         ),
@@ -3237,16 +3265,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               Icon(
                 icon,
                 color: color,
-                size: 16,
+                size: 14,
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 4),
               TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 800),
                 tween: Tween(begin: 0, end: value.toDouble()),
                 builder: (context, animatedValue, child) => Text(
                   '${animatedValue.toInt()}',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: color,
                   ),
@@ -3254,11 +3282,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: FontWeight.w600,
               color: color.withValues(alpha: 0.8),
               letterSpacing: 0.5,
@@ -3270,44 +3298,29 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildTodaysFocusSection(int dayIndex) {
-    // Build focus categories dynamically from loaded categories
-    final focusCategories = _categoryList.map((name) => {
-      'name': name,
-      'color': _getCategoryColor(name),
-    }).toList();
-
     return Container(
-      padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
+      padding: const EdgeInsets.only(bottom: 16), // Add bottom padding for better scrolling
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'TODAY\'S FOCUS',
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Colors.white.withValues(alpha: 0.9),
               letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _buildQuickStatsCard(dayIndex),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           _buildScreensaverButton(),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           // Timeline entries from backend - organized by time slot
           if (_timelineEntries.isNotEmpty) ...[
             _buildTimeSlotSection(),
-            const SizedBox(height: 24),
           ],
-          // Category sections
-          ...focusCategories.map((category) => 
-            _buildFocusCategoryCard(
-              category['name'] as String,
-              category['color'] as Color,
-              dayIndex,
-            )
-          ),
         ],
       ),
     );
@@ -3323,12 +3336,42 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     final afternoonEntries = sortedEntries.where((e) => e.startMinutes >= 720 && e.startMinutes < 1080).toList(); // 12:00-18:00
     final eveningEntries = sortedEntries.where((e) => e.startMinutes >= 1080).toList(); // After 18:00
     
+    // Determine current time section
+    final now = DateTime.now();
+    final currentMinutes = now.hour * 60 + now.minute;
+    
+    String currentSection;
+    if (currentMinutes < 720) {
+      currentSection = 'Morning';
+    } else if (currentMinutes < 1080) {
+      currentSection = 'Afternoon';
+    } else {
+      currentSection = 'Evening';
+    }
+    
+    // Build ordered list of sections (current section first)
+    final sections = <Map<String, dynamic>>[];
+    final allSections = [
+      {'name': 'Morning', 'entries': morningEntries, 'color': const Color(0xFFFFD60A)},
+      {'name': 'Afternoon', 'entries': afternoonEntries, 'color': const Color(0xFFFF9F0A)},
+      {'name': 'Evening', 'entries': eveningEntries, 'color': const Color(0xFF5856D6)},
+    ];
+    
+    // Add current section first
+    for (var section in allSections) {
+      if (section['name'] == currentSection) {
+        sections.insert(0, section);
+      } else {
+        sections.add(section);
+      }
+    }
+    
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFF2A2D3A),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.1),
           width: 1,
@@ -3340,60 +3383,159 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Row(
             children: [
               Container(
-                width: 12,
-                height: 12,
+                width: 10,
+                height: 10,
                 decoration: const BoxDecoration(
                   color: Color(0xFFFF9F0A),
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               const Text(
                 'Today\'s Schedule',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
                 ),
               ),
               const Spacer(),
               IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
+                icon: const Icon(Icons.refresh, size: 16),
                 color: Colors.white.withValues(alpha: 0.6),
                 onPressed: _loadTodaysTimeline,
                 tooltip: 'Refresh Timeline',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           if (_isLoadingTimeline)
             const Center(child: CircularProgressIndicator())
-          else if (sortedEntries.isEmpty)
+          else
+            ...sections.map((section) {
+              final name = section['name'] as String;
+              final entries = section['entries'] as List<TimelineEntry>;
+              final color = section['color'] as Color;
+              final isCurrent = name == currentSection;
+              final isExpanded = isCurrent || (_scheduleSectionExpanded[name] ?? false);
+              
+              return _buildCollapsibleSection(
+                name: name,
+                entries: entries,
+                color: color,
+                isCurrent: isCurrent,
+                isExpanded: isExpanded,
+              );
+            }),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildCollapsibleSection({
+    required String name,
+    required List<TimelineEntry> entries,
+    required Color color,
+    required bool isCurrent,
+    required bool isExpanded,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: isCurrent ? null : () {
+            setState(() {
+              _scheduleSectionExpanded[name] = !(_scheduleSectionExpanded[name] ?? false);
+            });
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                if (isCurrent) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'NOW',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                Text(
+                  '${entries.length}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                if (!isCurrent)
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: Colors.white.withValues(alpha: 0.4),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (isExpanded) ...[
+          if (entries.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.only(left: 16, bottom: 8),
               child: Text(
-                'No scheduled entries for today.',
+                'No entries',
                 style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.3),
                   fontStyle: FontStyle.italic,
                 ),
               ),
             )
-          else ...[
-            if (morningEntries.isNotEmpty) ...[
-              _buildTimeSlotGroup('Morning', morningEntries, const Color(0xFFFFD60A)),
-              const SizedBox(height: 12),
-            ],
-            if (afternoonEntries.isNotEmpty) ...[
-              _buildTimeSlotGroup('Afternoon', afternoonEntries, const Color(0xFFFF9F0A)),
-              const SizedBox(height: 12),
-            ],
-            if (eveningEntries.isNotEmpty)
-              _buildTimeSlotGroup('Evening', eveningEntries, const Color(0xFF5856D6)),
-          ],
+          else
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Column(
+                children: entries.map((entry) => _buildTimelineEntryItem(entry)).toList(),
+              ),
+            ),
         ],
-      ),
+        if (!isCurrent)
+          Divider(
+            color: Colors.white.withValues(alpha: 0.05),
+            height: 1,
+          ),
+      ],
     );
   }
 
@@ -3404,25 +3546,25 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         Row(
           children: [
             Container(
-              width: 8,
-              height: 8,
+              width: 6,
+              height: 6,
               decoration: BoxDecoration(
                 color: color,
                 shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Text(
               title,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: color,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         ...entries.map((entry) => _buildTimelineEntryItem(entry)),
       ],
     );
@@ -3499,19 +3641,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         entry.completionStatus == CompletionStatus.onTime ||
                         entry.completionStatus == CompletionStatus.delayed ||
                         entry.completionStatus == CompletionStatus.partial ||
-                        entry.completionStatus == CompletionStatus.avoided;
+                        entry.completionStatus == CompletionStatus.avoided ||
+                        entry.completionStatus == CompletionStatus.missed;
     
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      key: ValueKey('${entry.id}_${entry.habitId}_${entry.startMinutes}'),
+      margin: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           // Time column
           SizedBox(
-            width: 50,
+            width: 44,
             child: Text(
               entry.startTimeFormatted,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 color: Colors.white.withValues(alpha: 0.6),
                 fontWeight: FontWeight.w500,
               ),
@@ -3521,27 +3665,27 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           GestureDetector(
             onTap: () => _showTimelineEntryStateDialog(entry),
             child: Container(
-              width: 20,
-              height: 20,
+              width: 16,
+              height: 16,
               decoration: BoxDecoration(
                 color: isCompleted ? _getCompletionStatusColor(entry.completionStatus) : Colors.transparent,
                 border: Border.all(
                   color: isCompleted ? _getCompletionStatusColor(entry.completionStatus) : Colors.white.withValues(alpha: 0.3),
-                  width: 2,
+                  width: 1.5,
                 ),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
               ),
               child: isCompleted 
                 ? _getCompletionStatusIcon(entry.completionStatus)
                 : null,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           // Habit icon
           if (habit?.icon.isNotEmpty == true)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Text(habit!.icon, style: const TextStyle(fontSize: 18)),
+              padding: const EdgeInsets.only(right: 6),
+              child: Text(habit!.icon, style: const TextStyle(fontSize: 14)),
             ),
           // Habit name
           Expanded(
@@ -3553,7 +3697,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   Text(
                     habit?.title ?? 'Unknown',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 13,
                       color: isCompleted 
                         ? Colors.white.withValues(alpha: 0.8)
                         : Colors.white,
@@ -3564,7 +3708,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   Text(
                     entry.durationFormatted,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 10,
                       color: Colors.white.withValues(alpha: 0.4),
                     ),
                   ),
@@ -3574,15 +3718,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
           // Points badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: _getCompletionStatusColor(entry.completionStatus).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               '${entry.points} pts',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color: _getCompletionStatusColor(entry.completionStatus),
               ),
@@ -4316,254 +4460,128 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  int _getNextTransitionTime(int currentMinutes) {
-    // Define all transition times in minutes from midnight
-    final transitions = [
-      120,  // 2:00 AM (end book reading, start sleep)
-      540,  // 9:00 AM (end sleep, start cold shower)
-      570,  // 9:30 AM (end cold shower, start morning quran)
-      585,  // 9:45 AM (end morning quran, start breakfast time)
-      630,  // 10:30 AM (end breakfast time, start deep focus 1)
-      720,  // 12:00 PM (end deep focus 1, start guitar practice)
-      740,  // 12:20 PM (end guitar practice, start deep focus 2)
-      810,  // 1:30 PM (end deep focus 2, start zuhar nimaz)
-      825,  // 1:45 PM (end zuhar nimaz, start lunch time)
-      870,  // 2:30 PM (end lunch time, start deep focus 3)
-      960,  // 4:00 PM (end deep focus 3, start reset minute)
-      975,  // 4:15 PM (end reset minute, start deep focus 4)
-      1050, // 5:30 PM (end deep focus 4, start asr nimaz)
-      1080, // 6:00 PM (end asr nimaz, start chill time)
-      1200, // 8:00 PM (end chill time, start hit the gym)
-      1260, // 9:00 PM (end hit the gym, start dinner)
-      1380, // 11:00 PM (end dinner, start book reading)
-    ];
+  TimelineEntry? _getCurrentTimelineEntry(int currentMinutes) {
+    if (_timelineEntries.isEmpty) return null;
     
-    // Find the next transition after current time
-    for (int transition in transitions) {
-      if (currentMinutes < transition) {
-        return transition;
+    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    
+    for (int i = sortedEntries.length - 1; i >= 0; i--) {
+      final entry = sortedEntries[i];
+      if (currentMinutes >= entry.startMinutes && 
+          currentMinutes < entry.startMinutes + entry.durationMinutes) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  int _getNextTransitionTime(int currentMinutes) {
+    if (_timelineEntries.isEmpty) {
+      return currentMinutes + 60;
+    }
+    
+    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    
+    for (final entry in sortedEntries) {
+      final endMinutes = entry.startMinutes + entry.durationMinutes;
+      if (currentMinutes < endMinutes) {
+        return endMinutes;
       }
     }
     
-    // If no transition found today, return first transition tomorrow (2:00 AM next day)
-    return 120 + 1440; // 2:00 AM next day
+    if (sortedEntries.isNotEmpty) {
+      return sortedEntries.first.startMinutes + 1440;
+    }
+    
+    return currentMinutes + 60;
   }
 
   int _getCurrentActivityStartTime(int currentMinutes) {
-    // Define all transition times in minutes from midnight
-    final transitions = [
-      120,  // 2:00 AM (end book reading, start sleep)
-      540,  // 9:00 AM (end sleep, start cold shower)
-      570,  // 9:30 AM (end cold shower, start morning quran)
-      585,  // 9:45 AM (end morning quran, start breakfast time)
-      630,  // 10:30 AM (end breakfast time, start deep focus 1)
-      720,  // 12:00 PM (end deep focus 1, start guitar practice)
-      740,  // 12:20 PM (end guitar practice, start deep focus 2)
-      810,  // 1:30 PM (end deep focus 2, start zuhar nimaz)
-      825,  // 1:45 PM (end zuhar nimaz, start lunch time)
-      870,  // 2:30 PM (end lunch time, start deep focus 3)
-      960,  // 4:00 PM (end deep focus 3, start reset minute)
-      975,  // 4:15 PM (end reset minute, start deep focus 4)
-      1050, // 5:30 PM (end deep focus 4, start asr nimaz)
-      1080, // 6:00 PM (end asr nimaz, start chill time)
-      1200, // 8:00 PM (end chill time, start hit the gym)
-      1260, // 9:00 PM (end hit the gym, start dinner)
-      1380, // 11:00 PM (end dinner, start book reading)
-    ];
+    if (_timelineEntries.isEmpty) {
+      return currentMinutes;
+    }
     
-    // Find the last transition before or at current time
-    int activityStart = 120; // Default to 2:00 AM (start of sleep)
+    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
     
-    for (int i = 0; i < transitions.length; i++) {
-      if (currentMinutes >= transitions[i]) {
-        activityStart = transitions[i];
-      } else {
-        break;
+    for (int i = sortedEntries.length - 1; i >= 0; i--) {
+      final entry = sortedEntries[i];
+      if (currentMinutes >= entry.startMinutes) {
+        return entry.startMinutes;
       }
     }
     
-    // Handle the case where we're before the first transition (in sleep period)
-    if (currentMinutes < 120) {
-      activityStart = 1380; // 11:00 PM previous day (start of book reading)
+    if (sortedEntries.isNotEmpty) {
+      return sortedEntries.last.startMinutes;
     }
     
-    return activityStart;
+    return currentMinutes;
+  }
+
+  IconData _getIconForHabitName(String habitName) {
+    final lowerName = habitName.toLowerCase();
+    
+    if (lowerName.contains('shower') || lowerName.contains('bath')) {
+      return Icons.water_drop;
+    } else if (lowerName.contains('quran') || lowerName.contains('reading') || lowerName.contains('book')) {
+      return Icons.auto_stories;
+    } else if (lowerName.contains('prayer') || lowerName.contains('nimaz') || lowerName.contains('fajr') || 
+               lowerName.contains('zuhar') || lowerName.contains('asr') || lowerName.contains('maghrib') || 
+               lowerName.contains('isha') || lowerName.contains('duhr')) {
+      return Icons.mosque;
+    } else if (lowerName.contains('gym') || lowerName.contains('workout') || lowerName.contains('exercise')) {
+      return Icons.fitness_center;
+    } else if (lowerName.contains('breakfast')) {
+      return Icons.breakfast_dining;
+    } else if (lowerName.contains('lunch')) {
+      return Icons.lunch_dining;
+    } else if (lowerName.contains('dinner')) {
+      return Icons.dinner_dining;
+    } else if (lowerName.contains('focus') || lowerName.contains('work') || lowerName.contains('code') || lowerName.contains('study')) {
+      return Icons.code;
+    } else if (lowerName.contains('guitar') || lowerName.contains('music')) {
+      return Icons.music_note;
+    } else if (lowerName.contains('typing') || lowerName.contains('keyboard')) {
+      return Icons.keyboard;
+    } else if (lowerName.contains('walk') || lowerName.contains('walking')) {
+      return Icons.directions_walk;
+    } else if (lowerName.contains('water') || lowerName.contains('drink')) {
+      return Icons.local_drink;
+    } else if (lowerName.contains('sleep') || lowerName.contains('bed')) {
+      return Icons.bedtime;
+    } else if (lowerName.contains('chill') || lowerName.contains('relax') || lowerName.contains('rest')) {
+      return Icons.self_improvement;
+    } else if (lowerName.contains('reset') || lowerName.contains('break')) {
+      return Icons.refresh;
+    } else {
+      return Icons.access_time;
+    }
   }
 
   IconData _getHabitIcon(int dayIndex) {
     final now = DateTime.now();
-    final currentHour = now.hour;
-    final currentMinute = now.minute;
-    final totalMinutes = currentHour * 60 + currentMinute;
+    final currentMinutes = now.hour * 60 + now.minute;
     
-    // Enhanced schedule with better icons matching the detailed timeline
+    final currentEntry = _getCurrentTimelineEntry(currentMinutes);
+    if (currentEntry != null) {
+      return _getIconForHabitName(currentEntry.habitName);
+    }
     
-    // 9:00 - 9:40 AM: Cold shower
-    if (totalMinutes >= 540 && totalMinutes < 580) {
-      return Icons.water_drop; // More visually appealing than Icons.shower
-    }
-    // 9:40 - 10:00 AM: Fajr Nimaz
-    else if (totalMinutes >= 580 && totalMinutes < 600) {
-      return Icons.mosque; // Prayer/mosque icon
-    }
-    // 10:00 - 10:30 AM: Quran
-    else if (totalMinutes >= 600 && totalMinutes < 630) {
-      return Icons.menu_book; // Book icon for Quran
-    }
-    // 10:30 - 11:30 AM: Gym
-    else if (totalMinutes >= 630 && totalMinutes < 690) {
-      return Icons.fitness_center; // Gym/fitness icon
-    }
-    // 11:30 AM - 12:00 PM: Breakfast
-    else if (totalMinutes >= 690 && totalMinutes < 720) {
-      return Icons.breakfast_dining; // Breakfast icon
-    }
-    // 12:00 - 12:30 PM: Duhr
-    else if (totalMinutes >= 720 && totalMinutes < 750) {
-      return Icons.wb_sunny; // Sun icon for midday prayer
-    }
-    // 12:30 - 2:00 PM: Book Reading
-    else if (totalMinutes >= 750 && totalMinutes < 840) {
-      return Icons.auto_stories; // Book/stories icon
-    }
-    // 2:00 - 3:00 PM: Lunch
-    else if (totalMinutes >= 840 && totalMinutes < 900) {
-      return Icons.lunch_dining; // Lunch icon
-    }
-    // 3:00 - 3:30 PM: Asr
-    else if (totalMinutes >= 900 && totalMinutes < 930) {
-      return Icons.wb_twilight; // Afternoon prayer icon
-    }
-    // 3:30 - 5:30 PM: Data Structures
-    else if (totalMinutes >= 930 && totalMinutes < 1050) {
-      return Icons.code; // Code/programming icon
-    }
-    // 5:30 - 6:30 PM: Typing
-    else if (totalMinutes >= 1050 && totalMinutes < 1110) {
-      return Icons.keyboard; // Keyboard icon
-    }
-    // 6:30 - 7:00 PM: Maghrib
-    else if (totalMinutes >= 1110 && totalMinutes < 1140) {
-      return Icons.nights_stay; // Evening prayer icon
-    }
-    // 7:00 - 8:00 PM: Guitar
-    else if (totalMinutes >= 1140 && totalMinutes < 1200) {
-      return Icons.music_note; // Music/guitar icon
-    }
-    // 8:00 - 8:30 PM: Dinner
-    else if (totalMinutes >= 1200 && totalMinutes < 1230) {
-      return Icons.dinner_dining; // Dinner icon
-    }
-    // 8:30 - 9:00 PM: Isha
-    else if (totalMinutes >= 1230 && totalMinutes < 1260) {
-      return Icons.star; // Star icon for night prayer
-    }
-    // 9:00 - 9:30 PM: Walk
-    else if (totalMinutes >= 1260 && totalMinutes < 1290) {
-      return Icons.directions_walk; // Walking icon
-    }
-    // 9:30 - 10:00 PM: Evening Quran
-    else if (totalMinutes >= 1290 && totalMinutes < 1320) {
-      return Icons.book; // Book icon for evening Quran
-    }
-    // 10:00 - 11:00 PM: Water
-    else if (totalMinutes >= 1320 && totalMinutes < 1380) {
-      return Icons.local_drink; // Drink/water icon
-    }
-    // 11:00 PM - 1:00 AM: Book Reading
-    else if (totalMinutes >= 1380 || totalMinutes < 60) {
-      return Icons.library_books; // Library books icon
-    }
-    // 1:00 - 2:00 AM: Bed time
-    else if (totalMinutes >= 60 && totalMinutes < 120) {
-      return Icons.bed; // Bed icon
-    }
-    // 2:00 - 9:00 AM: Sleep time
-    else if (totalMinutes >= 120 && totalMinutes < 540) {
-      return Icons.bedtime; // Sleep icon
-    }
-    else {
-      return Icons.access_time; // Default clock icon
-    }
+    return Icons.access_time;
   }
 
   String _getCurrentHabitInAction(int dayIndex) {
     final now = DateTime.now();
-    final currentHour = now.hour;
-    final currentMinute = now.minute;
-    final totalMinutes = currentHour * 60 + currentMinute;
+    final currentMinutes = now.hour * 60 + now.minute;
     
-    // 9:00 – 9:30 AM — Cold Shower (540-570 minutes)
-    if (totalMinutes >= 540 && totalMinutes < 570) {
-      return "Cold Shower";
+    final currentEntry = _getCurrentTimelineEntry(currentMinutes);
+    if (currentEntry != null) {
+      return currentEntry.habitName;
     }
-    // 9:30 – 9:45 AM — Morning Quran (570-585 minutes)
-    else if (totalMinutes >= 570 && totalMinutes < 585) {
-      return "Morning Quran";
-    }
-    // 9:45 – 10:30 AM — Breakfast Time (585-630 minutes)
-    else if (totalMinutes >= 585 && totalMinutes < 630) {
-      return "Breakfast Time";
-    }
-    // 10:30 – 12:00 PM — Deep Focus 1 (630-720 minutes)
-    else if (totalMinutes >= 630 && totalMinutes < 720) {
-      return "Deep Focus 1";
-    }
-    // 12:00 – 12:20 PM — Guitar Practice (720-740 minutes)
-    else if (totalMinutes >= 720 && totalMinutes < 740) {
-      return "Guitar Practice";
-    }
-    // 12:20 – 1:30 PM — Deep Focus 2 (740-810 minutes)
-    else if (totalMinutes >= 740 && totalMinutes < 810) {
-      return "Deep Focus 2";
-    }
-    // 1:30 – 1:45 PM — Zuhar Nimaz (810-825 minutes)
-    else if (totalMinutes >= 810 && totalMinutes < 825) {
-      return "Zuhar Nimaz";
-    }
-    // 1:45 – 2:30 PM — Lunch Time (825-870 minutes)
-    else if (totalMinutes >= 825 && totalMinutes < 870) {
-      return "Lunch Time";
-    }
-    // 2:30 – 4:00 PM — Deep Focus 3 (870-960 minutes)
-    else if (totalMinutes >= 870 && totalMinutes < 960) {
-      return "Deep Focus 3";
-    }
-    // 4:00 – 4:15 PM — Reset Minute (960-975 minutes)
-    else if (totalMinutes >= 960 && totalMinutes < 975) {
-      return "Reset Minute";
-    }
-    // 4:15 – 5:30 PM — Deep Focus 4 (975-1050 minutes)
-    else if (totalMinutes >= 975 && totalMinutes < 1050) {
-      return "Deep Focus 4";
-    }
-    // 5:30 – 6:00 PM — Asr Nimaz (1050-1080 minutes)
-    else if (totalMinutes >= 1050 && totalMinutes < 1080) {
-      return "Asr Nimaz";
-    }
-    // 6:00 – 8:00 PM — Chill Time (1080-1200 minutes)
-    else if (totalMinutes >= 1080 && totalMinutes < 1200) {
-      return "Chill Time";
-    }
-    // 8:00 – 9:00 PM — Hit the Gym (1200-1260 minutes)
-    else if (totalMinutes >= 1200 && totalMinutes < 1260) {
-      return "Hit the Gym";
-    }
-    // 9:00 – 11:00 PM — Dinner (1260-1380 minutes)
-    else if (totalMinutes >= 1260 && totalMinutes < 1380) {
-      return "Dinner";
-    }
-    // 11:00 PM – 2:00 AM — Book Reading (1380+ or 0-120 minutes)
-    else if (totalMinutes >= 1380 || totalMinutes < 120) {
-      return "Book Reading";
-    }
-    // 2:00 - 9:00 AM: Sleep (120-540 minutes)
-    else if (totalMinutes >= 120 && totalMinutes < 540) {
-      return "Sleep";
-    }
-    else {
-      return "Transition period";
-    }
+    
+    return "No scheduled activity";
   }
 
   String _getHabitMotivation() {

@@ -17,7 +17,6 @@ class _HabitListScreenState extends State<HabitListScreen> {
   Set<String> _compoundHabitIds = {};
   bool _isLoading = true;
   String? _error;
-  String _selectedCategory = 'All';
 
   @override
   void initState() {
@@ -76,20 +75,9 @@ class _HabitListScreenState extends State<HabitListScreen> {
     }
   }
 
-  List<String> get _categories {
-    final categories = _habits.map((h) => h.category).toSet().toList();
-    categories.sort();
-    return ['All', ...categories];
-  }
-
-  List<Habit> get _filteredHabits {
-    if (_selectedCategory == 'All') return _habits;
-    return _habits.where((h) => h.category == _selectedCategory).toList();
-  }
-
   Map<String, List<Habit>> get _groupedHabits {
     final Map<String, List<Habit>> grouped = {};
-    for (final habit in _filteredHabits) {
+    for (final habit in _habits) {
       grouped.putIfAbsent(habit.category, () => []).add(habit);
     }
     return grouped;
@@ -289,24 +277,6 @@ class _HabitListScreenState extends State<HabitListScreen> {
       ),
       body: Column(
         children: [
-          if (_categories.length > 1)
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                children: _categories.map((category) {
-                  final isSelected = category == _selectedCategory;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: Text(category),
-                      selected: isSelected,
-                      onSelected: (_) => setState(() => _selectedCategory = category),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())

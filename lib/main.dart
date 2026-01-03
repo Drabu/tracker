@@ -8,6 +8,12 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:html' as html show window;
 import 'dart:js' as js;
 import 'dart:html' as html;
+import 'screens/panel_config_screen.dart';
+import 'screens/timeline_config_screen.dart';
+import 'screens/timeline_screen.dart';
+import 'screens/habit_list_screen.dart';
+import 'models/models.dart';
+import 'services/api_service.dart';
 
 enum HabitState {
   none,
@@ -59,11 +65,38 @@ class DailyTrackerHome extends StatefulWidget {
 }
 
 class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProviderStateMixin {
+  static const String _devUserId = 'dev-user';
+  
   ViewType _currentView = ViewType.day;
   DateTime _selectedDate = DateTime.now();
   DateTime _currentWeekStart = DateTime.now();
   final Map<String, Map<String, Map<int, HabitState>>> _trackingData = {}; // habit -> weekKey -> dayIndex -> state
   final Map<String, Map<String, Map<int, TimeOfDay?>>> _timeData = {}; // habit -> weekKey -> dayIndex -> time
+  
+  // Timeline data from backend
+  List<TimelineEntry> _timelineEntries = [];
+  Map<String, Habit> _habitsMap = {};
+  Timeline? _currentTimeline;
+  bool _isLoadingTimeline = false;
+  
+  // Dynamic categories and habits loaded from API
+  Map<String, List<String>> _categories = {};
+  List<String> _categoryList = [];
+  bool _isLoadingCategories = false;
+  
+  // Category colors - generated dynamically based on categories
+  static const List<Color> _categoryColorPalette = [
+    Color(0xFFFF453A), // Red
+    Color(0xFF30D158), // Green
+    Color(0xFFFF9F0A), // Orange
+    Color(0xFF00C7BE), // Teal
+    Color(0xFF5856D6), // Purple
+    Color(0xFF007AFF), // Blue
+    Color(0xFFAF52DE), // Magenta
+    Color(0xFFFFD60A), // Yellow
+  ];
+  
+  Map<String, Color> _categoryColors = {};
   
   late AnimationController _progressAnimationController;
   late AnimationController _ringAnimationController;
@@ -96,67 +129,60 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-  final Map<String, List<String>> _categories = {
-    'Akhirat': [
-      'Quran',
-      'Fajr',
-      'Duhr',
-      'Asr',
-      'Maghrib',
-      'Isha',
-      'Evening Quran',
-    ],
-    'Personal': [
-      'Guitar',
-      'Bar Chord',
-      'Fingerstyle',
-      'Random',
-      'Book',
-      'Walk',
-    ],
-    'Professional': [
-      'Typing',
-      'Data Structures',
-    ],
-    'Health': [
-      'Breakfast',
-      'Eggs',
-      'Meal',
-      'Coffee',
-      'Cold Shower',
-      'Gym',
-      'Mid Day Shower',
-      'Water',
-    ],
-    'Sleep Tracking': [
-      'Bed Time',
-      'Sleep Time', 
-      'Mid Day Sleep',
-      'Wake Time (W.T.)',
-    ],
-  };
-
-  final Set<String> _prayerHabits = {
-    'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha'
-  };
-
-  final Set<String> _timeBasedHabits = {
-    'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Gym', 'Bed Time', 'Sleep Time', 'Wake Time (W.T.)'
-  };
-
-  final Set<String> _sleepTrackingHabits = {
-    'Bed Time', 'Sleep Time', 'Mid Day Sleep', 'Wake Time (W.T.)'
-  };
-
-  final Set<String> _compoundingHabits = {
-    'Quran', 'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Evening Quran', // Akhirat
-    'Guitar', 'Book', // Personal  
-    'Typing', 'Data Structures', // Professional
-    'Gym', 'Water' // Health
-  };
+  // Dynamic sets - populated from API habits
+  Set<String> _prayerHabits = {};
+  Set<String> _timeBasedHabits = {};
+  Set<String> _sleepTrackingHabits = {};
+  Set<String> _compoundingHabits = {};
+  Set<String> _userCompoundHabitIds = {};
 
   // Development mode flag - set to true to enable all habits on weekends
   static const bool _isDevelopmentMode = true;
+
+  Color _getCategoryColor(String categoryName) {
+    return _categoryColors[categoryName] ?? const Color(0xFF58A6FF);
+  }
+
+  void _initializeCategoryColors() {
+    _categoryColors = {};
+    for (int i = 0; i < _categoryList.length; i++) {
+      _categoryColors[_categoryList[i]] = _categoryColorPalette[i % _categoryColorPalette.length];
+    }
+  }
+
+  void _initializeHabitSets() {
+    _prayerHabits = {};
+    _timeBasedHabits = {};
+    _sleepTrackingHabits = {};
+    _compoundingHabits = {};
+    
+    for (var habit in _habitsMap.values) {
+      final title = habit.title;
+      final category = habit.category.toLowerCase();
+      
+      // Determine habit types based on title patterns
+      if (['fajr', 'duhr', 'asr', 'maghrib', 'isha'].contains(title.toLowerCase())) {
+        _prayerHabits.add(title);
+        _timeBasedHabits.add(title);
+      }
+      
+      if (category.contains('sleep') || ['bed time', 'sleep time', 'wake time', 'mid day sleep'].any((s) => title.toLowerCase().contains(s))) {
+        _sleepTrackingHabits.add(title);
+        if (!title.toLowerCase().contains('mid day')) {
+          _timeBasedHabits.add(title);
+        }
+      }
+      
+      if (title.toLowerCase().contains('gym')) {
+        _timeBasedHabits.add(title);
+      }
+      
+      // Add to compounding habits if user marked it as compound
+      if (_userCompoundHabitIds.contains(habit.id)) {
+        _compoundingHabits.add(title);
+      }
+    }
+  }
 
   bool _isHabitDisabled(String habit, int dayIndex) {
     if (_isDevelopmentMode) return false; // Never disable habits in dev mode
@@ -549,6 +575,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _categoryProgressAnimationController.forward();
       }
     });
+    
+    // Load today's timeline from backend
+    _loadTodaysTimeline();
     
     // Set up idle mode timer
     _setupIdleTimer();
@@ -1696,6 +1725,127 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
   }
 
+  String _formatDateForApi(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _loadTodaysTimeline() async {
+    setState(() {
+      _isLoadingTimeline = true;
+      _isLoadingCategories = true;
+    });
+    try {
+      // Load habits, categories, and compound habits in parallel
+      final results = await Future.wait([
+        ApiService.getHabits(),
+        ApiService.getCategories(),
+        ApiService.getUserCompoundHabits(_devUserId),
+      ]);
+      
+      final habits = results[0] as List<Habit>;
+      final categories = results[1] as List<String>;
+      final compoundHabitIds = results[2] as List<String>;
+      
+      _habitsMap = {for (var h in habits) h.id: h};
+      _categoryList = categories;
+      _userCompoundHabitIds = compoundHabitIds.toSet();
+      
+      // Build _categories map from habits
+      _categories = {};
+      for (var habit in habits) {
+        if (!_categories.containsKey(habit.category)) {
+          _categories[habit.category] = [];
+        }
+        _categories[habit.category]!.add(habit.title);
+      }
+      
+      // Initialize colors and habit sets
+      _initializeCategoryColors();
+      _initializeHabitSets();
+
+      final dateStr = _formatDateForApi(DateTime.now());
+      final timeline = await ApiService.getTimelineByDate(_devUserId, dateStr);
+      
+      setState(() {
+        _currentTimeline = timeline;
+        _timelineEntries = timeline?.entries ?? [];
+        _isLoadingTimeline = false;
+        _isLoadingCategories = false;
+      });
+    } catch (e) {
+      print('Error loading timeline: $e');
+      setState(() {
+        _isLoadingTimeline = false;
+        _isLoadingCategories = false;
+      });
+    }
+  }
+
+  Future<void> _updateTimelineEntryStatus(TimelineEntry entry, CompletionStatus status) async {
+    if (_currentTimeline == null) return;
+    
+    try {
+      final updatedTimeline = await ApiService.updateEntryStatus(
+        timelineId: _currentTimeline!.id,
+        entryId: entry.id,
+        status: _completionStatusToString(status),
+      );
+      
+      setState(() {
+        _currentTimeline = updatedTimeline;
+        _timelineEntries = updatedTimeline.entries;
+      });
+      
+      // Sync with habit tracking state
+      final habitName = entry.habitName;
+      if (habitName.isNotEmpty) {
+        final habitState = _completionStatusToHabitState(status);
+        final dayIndex = DateTime.now().weekday - 1;
+        _updateHabitState(habitName, dayIndex, habitState, null);
+      }
+    } catch (e) {
+      print('Error updating entry status: $e');
+    }
+  }
+  
+  HabitState _completionStatusToHabitState(CompletionStatus status) {
+    switch (status) {
+      case CompletionStatus.onTime:
+      case CompletionStatus.completed:
+        return HabitState.completed;
+      case CompletionStatus.delayed:
+      case CompletionStatus.partial:
+        return HabitState.partial;
+      case CompletionStatus.missed:
+        return HabitState.missed;
+      case CompletionStatus.avoided:
+        return HabitState.avoided;
+      case CompletionStatus.none:
+      default:
+        return HabitState.none;
+    }
+  }
+
+  String _completionStatusToString(CompletionStatus status) {
+    switch (status) {
+      case CompletionStatus.onTime:
+        return 'onTime';
+      case CompletionStatus.delayed:
+        return 'delayed';
+      case CompletionStatus.partial:
+        return 'partial';
+      case CompletionStatus.completed:
+        return 'completed';
+      case CompletionStatus.missed:
+        return 'missed';
+      case CompletionStatus.avoided:
+        return 'avoided';
+      case CompletionStatus.none:
+      default:
+        return 'none';
+    }
+  }
+
   bool _shouldShowContributionGraph() {
     return false; // Hidden for now
   }
@@ -1763,6 +1913,77 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(width: 8),
         ],
         _buildViewSelector(),
+        const SizedBox(width: 8),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.settings),
+          tooltip: 'Settings',
+          onSelected: (value) {
+            if (value == 'timeline') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TimelineScreen(userId: 'dev-user')),
+              );
+            } else if (value == 'habits') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const HabitListScreen()),
+              );
+            } else if (value == 'panels') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PanelConfigScreen()),
+              );
+            } else if (value == 'timelines') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const TimelineConfigScreen()),
+              );
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'timeline',
+              child: Row(
+                children: [
+                  Icon(Icons.schedule, size: 20),
+                  SizedBox(width: 12),
+                  Text('Daily Timeline'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'habits',
+              child: Row(
+                children: [
+                  Icon(Icons.list_alt, size: 20),
+                  SizedBox(width: 12),
+                  Text('Manage Habits'),
+                ],
+              ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(
+              value: 'panels',
+              child: Row(
+                children: [
+                  Icon(Icons.dashboard, size: 20),
+                  SizedBox(width: 12),
+                  Text('Configure Panels'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'timelines',
+              child: Row(
+                children: [
+                  Icon(Icons.tune, size: 20),
+                  SizedBox(width: 12),
+                  Text('Configure Timelines'),
+                ],
+              ),
+            ),
+          ],
+        ),
         const SizedBox(width: 16),
       ],
     );
@@ -2213,10 +2434,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return ValueListenableBuilder<Map<String, double>>(
       valueListenable: _categoryProgressNotifier,
       builder: (context, categoryProgressMap, child) {
-        final deenProgress = categoryProgressMap['Akhirat'] ?? _getCategoryProgress('Akhirat', dayIndex);
-        final personalProgress = categoryProgressMap['Personal'] ?? _getCategoryProgress('Personal', dayIndex);
-        final healthProgress = categoryProgressMap['Health'] ?? _getCategoryProgress('Health', dayIndex);
-        final totalProgress = (deenProgress + personalProgress + healthProgress) / 3;
+        // Get up to 3 categories for the activity rings
+        final displayCategories = _categoryList.take(3).toList();
+        final progressValues = displayCategories.map((cat) => 
+          categoryProgressMap[cat] ?? _getCategoryProgress(cat, dayIndex)
+        ).toList();
+        
+        final totalProgress = progressValues.isEmpty ? 0.0 : 
+          progressValues.reduce((a, b) => a + b) / progressValues.length;
     
     return Container(
       padding: const EdgeInsets.all(28),
@@ -2305,36 +2530,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      AnimatedBuilder(
-                        animation: _ringAnimation,
-                        builder: (context, child) => _buildEnhancedActivityRing(
-                          radius: 60,
-                          strokeWidth: 9,
-                          progress: deenProgress * _ringAnimation.value,
-                          color: const Color(0xFFFF453A),
-                          glowColor: const Color(0xFFFF453A).withValues(alpha: 0.4),
-                        ),
-                      ),
-                      AnimatedBuilder(
-                        animation: _ringAnimation,
-                        builder: (context, child) => _buildEnhancedActivityRing(
-                          radius: 46,
-                          strokeWidth: 9,
-                          progress: personalProgress * _ringAnimation.value,
-                          color: const Color(0xFF30D158),
-                          glowColor: const Color(0xFF30D158).withValues(alpha: 0.4),
-                        ),
-                      ),
-                      AnimatedBuilder(
-                        animation: _ringAnimation,
-                        builder: (context, child) => _buildEnhancedActivityRing(
-                          radius: 32,
-                          strokeWidth: 9,
-                          progress: healthProgress * _ringAnimation.value,
-                          color: const Color(0xFF00C7BE),
-                          glowColor: const Color(0xFF00C7BE).withValues(alpha: 0.4),
-                        ),
-                      ),
+                      // Build rings dynamically for up to 3 categories
+                      ...List.generate(displayCategories.length.clamp(0, 3), (i) {
+                        final radii = [60.0, 46.0, 32.0];
+                        final color = _getCategoryColor(displayCategories[i]);
+                        return AnimatedBuilder(
+                          animation: _ringAnimation,
+                          builder: (context, child) => _buildEnhancedActivityRing(
+                            radius: radii[i],
+                            strokeWidth: 9,
+                            progress: progressValues[i] * _ringAnimation.value,
+                            color: color,
+                            glowColor: color.withValues(alpha: 0.4),
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -2387,14 +2597,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Progress indicators
+                  // Progress indicators - dynamically built
                   Column(
                     children: [
-                      _buildProgressIndicator('Akhirat', deenProgress, const Color(0xFFFF453A)),
-                      const SizedBox(height: 6),
-                      _buildProgressIndicator('Personal', personalProgress, const Color(0xFF30D158)),
-                      const SizedBox(height: 6),
-                      _buildProgressIndicator('Health', healthProgress, const Color(0xFF00C7BE)),
+                      ...displayCategories.asMap().entries.map((entry) => 
+                        Padding(
+                          padding: EdgeInsets.only(bottom: entry.key < displayCategories.length - 1 ? 6 : 0),
+                          child: _buildProgressIndicator(
+                            entry.value, 
+                            progressValues[entry.key], 
+                            _getCategoryColor(entry.value)
+                          ),
+                        )
+                      ),
                       const SizedBox(height: 12),
                       _buildKeywordsCard(),
                     ],
@@ -3055,13 +3270,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildTodaysFocusSection(int dayIndex) {
-    final focusCategories = [
-      {'name': 'Akhirat', 'color': const Color(0xFFFF453A)},
-      {'name': 'Personal', 'color': const Color(0xFF30D158)},
-      {'name': 'Professional', 'color': const Color(0xFF007AFF)},
-      {'name': 'Health', 'color': const Color(0xFF00C7BE)},
-      {'name': 'Sleep Tracking', 'color': const Color(0xFF5856D6)},
-    ];
+    // Build focus categories dynamically from loaded categories
+    final focusCategories = _categoryList.map((name) => {
+      'name': name,
+      'color': _getCategoryColor(name),
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
@@ -3082,6 +3295,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 24),
           _buildScreensaverButton(),
           const SizedBox(height: 24),
+          // Timeline entries from backend - organized by time slot
+          if (_timelineEntries.isNotEmpty) ...[
+            _buildTimeSlotSection(),
+            const SizedBox(height: 24),
+          ],
+          // Category sections
           ...focusCategories.map((category) => 
             _buildFocusCategoryCard(
               category['name'] as String,
@@ -3092,6 +3311,375 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         ],
       ),
     );
+  }
+
+  Widget _buildTimeSlotSection() {
+    // Sort timeline entries by start time
+    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    
+    // Group entries by time periods
+    final morningEntries = sortedEntries.where((e) => e.startMinutes < 720).toList(); // Before 12:00
+    final afternoonEntries = sortedEntries.where((e) => e.startMinutes >= 720 && e.startMinutes < 1080).toList(); // 12:00-18:00
+    final eveningEntries = sortedEntries.where((e) => e.startMinutes >= 1080).toList(); // After 18:00
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF9F0A),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Today\'s Schedule',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                color: Colors.white.withValues(alpha: 0.6),
+                onPressed: _loadTodaysTimeline,
+                tooltip: 'Refresh Timeline',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingTimeline)
+            const Center(child: CircularProgressIndicator())
+          else if (sortedEntries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No scheduled entries for today.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else ...[
+            if (morningEntries.isNotEmpty) ...[
+              _buildTimeSlotGroup('Morning', morningEntries, const Color(0xFFFFD60A)),
+              const SizedBox(height: 12),
+            ],
+            if (afternoonEntries.isNotEmpty) ...[
+              _buildTimeSlotGroup('Afternoon', afternoonEntries, const Color(0xFFFF9F0A)),
+              const SizedBox(height: 12),
+            ],
+            if (eveningEntries.isNotEmpty)
+              _buildTimeSlotGroup('Evening', eveningEntries, const Color(0xFF5856D6)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeSlotGroup(String title, List<TimelineEntry> entries, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ...entries.map((entry) => _buildTimelineEntryItem(entry)),
+      ],
+    );
+  }
+
+  Widget _buildTimelineEntriesCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF9F0A),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'My Timeline',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                color: Colors.white.withValues(alpha: 0.6),
+                onPressed: _loadTodaysTimeline,
+                tooltip: 'Refresh Timeline',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_isLoadingTimeline)
+            const Center(child: CircularProgressIndicator())
+          else if (_timelineEntries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No timeline entries for today. Add some in the Timeline screen.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            ..._timelineEntries.map((entry) => _buildTimelineEntryItem(entry)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineEntryItem(TimelineEntry entry) {
+    final habit = _habitsMap[entry.habitId];
+    final isCompleted = entry.completionStatus == CompletionStatus.completed ||
+                        entry.completionStatus == CompletionStatus.onTime ||
+                        entry.completionStatus == CompletionStatus.delayed ||
+                        entry.completionStatus == CompletionStatus.partial ||
+                        entry.completionStatus == CompletionStatus.avoided;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          // Time column
+          SizedBox(
+            width: 50,
+            child: Text(
+              entry.startTimeFormatted,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          // Completion checkbox
+          GestureDetector(
+            onTap: () => _showTimelineEntryStateDialog(entry),
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: BoxDecoration(
+                color: isCompleted ? _getCompletionStatusColor(entry.completionStatus) : Colors.transparent,
+                border: Border.all(
+                  color: isCompleted ? _getCompletionStatusColor(entry.completionStatus) : Colors.white.withValues(alpha: 0.3),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: isCompleted 
+                ? _getCompletionStatusIcon(entry.completionStatus)
+                : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Habit icon
+          if (habit?.icon.isNotEmpty == true)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(habit!.icon, style: const TextStyle(fontSize: 18)),
+            ),
+          // Habit name
+          Expanded(
+            child: GestureDetector(
+              onTap: () => _showTimelineEntryStateDialog(entry),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    habit?.title ?? 'Unknown',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: isCompleted 
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : Colors.white,
+                      decoration: isCompleted ? TextDecoration.lineThrough : null,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                  Text(
+                    entry.durationFormatted,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Points badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _getCompletionStatusColor(entry.completionStatus).withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${entry.points} pts',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _getCompletionStatusColor(entry.completionStatus),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTimelineEntryStateDialog(TimelineEntry entry) {
+    final habit = _habitsMap[entry.habitId];
+    final availableStates = [
+      CompletionStatus.none,
+      CompletionStatus.completed,
+      CompletionStatus.partial,
+      CompletionStatus.missed,
+    ];
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('${habit?.title ?? 'Entry'} - ${entry.startTimeFormatted}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: availableStates.map((status) {
+              return ListTile(
+                leading: _getCompletionStatusIcon(status),
+                title: Text(_getCompletionStatusDisplayName(status)),
+                trailing: entry.completionStatus == status 
+                  ? const Icon(Icons.check, color: Colors.green)
+                  : null,
+                onTap: () {
+                  _updateTimelineEntryStatus(entry, status);
+                  Navigator.of(context).pop();
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
+  Color _getCompletionStatusColor(CompletionStatus status) {
+    switch (status) {
+      case CompletionStatus.none:
+        return Colors.grey;
+      case CompletionStatus.onTime:
+      case CompletionStatus.completed:
+      case CompletionStatus.avoided:
+        return Colors.green.shade600;
+      case CompletionStatus.delayed:
+      case CompletionStatus.partial:
+        return Colors.orange.shade400;
+      case CompletionStatus.missed:
+        return Colors.red.shade400;
+    }
+  }
+
+  Widget _getCompletionStatusIcon(CompletionStatus status) {
+    switch (status) {
+      case CompletionStatus.none:
+        return const SizedBox.shrink();
+      case CompletionStatus.onTime:
+        return const Icon(Icons.access_time, color: Colors.white, size: 16);
+      case CompletionStatus.completed:
+        return const Icon(Icons.check, color: Colors.white, size: 16);
+      case CompletionStatus.delayed:
+        return const Icon(Icons.schedule, color: Colors.white, size: 16);
+      case CompletionStatus.partial:
+        return const Icon(Icons.circle_outlined, color: Colors.white, size: 16);
+      case CompletionStatus.missed:
+        return const Icon(Icons.close, color: Colors.white, size: 16);
+      case CompletionStatus.avoided:
+        return const Icon(Icons.block, color: Colors.white, size: 16);
+    }
+  }
+
+  String _getCompletionStatusDisplayName(CompletionStatus status) {
+    switch (status) {
+      case CompletionStatus.none:
+        return 'Not tracked';
+      case CompletionStatus.onTime:
+        return 'On time';
+      case CompletionStatus.delayed:
+        return 'Delayed';
+      case CompletionStatus.partial:
+        return 'Partial';
+      case CompletionStatus.completed:
+        return 'Completed';
+      case CompletionStatus.missed:
+        return 'Missed';
+      case CompletionStatus.avoided:
+        return 'Avoided (Good!)';
+    }
   }
 
   Widget _buildFocusCategoryCard(String categoryName, Color categoryColor, int dayIndex) {
@@ -3992,13 +4580,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildCategoryProgressSection(int dayIndex) {
-    final progressCategories = [
-      {'name': 'Akhirat', 'color': const Color(0xFFFF453A)},
-      {'name': 'Personal', 'color': const Color(0xFF30D158)},
-      {'name': 'Professional', 'color': const Color(0xFF007AFF)},
-      {'name': 'Health', 'color': const Color(0xFF00C7BE)},
-      {'name': 'Sleep Tracking', 'color': const Color(0xFF5856D6)},
-    ];
+    // Build progress categories dynamically
+    final progressCategories = _categoryList.map((name) => {
+      'name': name,
+      'color': _getCategoryColor(name),
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -4876,13 +5462,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   // Individual Category Rings Widget
   Widget _buildIndividualCategoryRings(int dayIndex) {
-    final categories = [
-      {'name': 'Akhirat', 'color': const Color(0xFFFF453A), 'title': 'Akhirat'},
-      {'name': 'Personal', 'color': const Color(0xFF30D158), 'title': 'Personal'},
-      {'name': 'Professional', 'color': const Color(0xFFFF9F0A), 'title': 'Professional'},
-      {'name': 'Health', 'color': const Color(0xFF00C7BE), 'title': 'Health'},
-      {'name': 'Sleep', 'color': const Color(0xFF007AFF), 'title': 'Sleep'},
-    ];
+    // Build categories dynamically
+    final categories = _categoryList.map((name) => {
+      'name': name,
+      'color': _getCategoryColor(name),
+      'title': name,
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -5098,42 +5683,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             child: Stack(
               alignment: Alignment.center,
               children: [
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 85,
-                    strokeWidth: 12,
-                    progress: _getCategoryProgress('Akhirat', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFFFF453A), // Red ring
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 65,
-                    strokeWidth: 12,
-                    progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFF30D158), // Green ring
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 45,
-                    strokeWidth: 12,
-                    progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFF00C7BE), // Cyan ring
-                  ),
-                ),
-                AnimatedBuilder(
-                  animation: _ringAnimation,
-                  builder: (context, child) => _buildActivityRing(
-                    radius: 25,
-                    strokeWidth: 12,
-                    progress: _getCategoryProgress('Sleep Tracking', dayIndex) * _ringAnimation.value,
-                    color: const Color(0xFF5856D6), // Purple ring
-                  ),
-                ),
+                // Build rings dynamically for all categories
+                ...List.generate(_categoryList.length.clamp(0, 4), (i) {
+                  final radii = [85.0, 65.0, 45.0, 25.0];
+                  final categoryName = _categoryList[i];
+                  final color = _getCategoryColor(categoryName);
+                  return AnimatedBuilder(
+                    animation: _ringAnimation,
+                    builder: (context, child) => _buildActivityRing(
+                      radius: radii[i],
+                      strokeWidth: 12,
+                      progress: _getCategoryProgress(categoryName, dayIndex) * _ringAnimation.value,
+                      color: color,
+                    ),
+                  );
+                }),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -5244,57 +5808,25 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   Widget _buildRingLegend() {
     return Column(
       children: [
-        AnimatedBuilder(
-          animation: _ringAnimation,
-          builder: (context, child) {
-            DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
-            return _buildLegendItem(
-              color: const Color(0xFFFF453A),
-              title: 'Akhirat',
-              subtitle: '${(_getCategoryProgress('Barzak (Qabt-Qafn-Darkness)', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        AnimatedBuilder(
-          animation: _ringAnimation,
-          builder: (context, child) {
-            DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
-            return _buildLegendItem(
-              color: const Color(0xFF30D158),
-              title: 'Personal',
-              subtitle: '${(_getCategoryProgress('Personal', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        AnimatedBuilder(
-          animation: _ringAnimation,
-          builder: (context, child) {
-            DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
-            return _buildLegendItem(
-              color: const Color(0xFF00C7BE),
-              title: 'Health',
-              subtitle: '${(_getCategoryProgress('Health', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        AnimatedBuilder(
-          animation: _ringAnimation,
-          builder: (context, child) {
-            DateTime now = DateTime.now();
-            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
-            return _buildLegendItem(
-              color: const Color(0xFF5856D6),
-              title: 'Sleep Tracking',
-              subtitle: '${(_getCategoryProgress('Sleep Tracking', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
-            );
-          },
-        ),
+        ...List.generate(_categoryList.length.clamp(0, 4), (i) {
+          final categoryName = _categoryList[i];
+          final color = _getCategoryColor(categoryName);
+          return AnimatedBuilder(
+            animation: _ringAnimation,
+            builder: (context, child) {
+              DateTime now = DateTime.now();
+              int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
+              return Padding(
+                padding: EdgeInsets.only(bottom: i < _categoryList.length.clamp(0, 4) - 1 ? 8 : 0),
+                child: _buildLegendItem(
+                  color: color,
+                  title: categoryName,
+                  subtitle: '${(_getCategoryProgress(categoryName, currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+                ),
+              );
+            },
+          );
+        }),
       ],
     );
   }
@@ -5628,15 +6160,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     int totalCount = 0;
     
     Map<String, double> categoryProgress = {};
-    Map<String, Color> categoryColors = {
-      'Akhirat': const Color(0xFFFF453A),
-      'Personal': const Color(0xFF30D158),
-      'Professional': const Color(0xFFFF9F0A),
-      'Health': const Color(0xFF00C7BE),
-    };
     
-    // Calculate progress for each category
-    for (String category in ['Akhirat', 'Personal', 'Professional', 'Health']) {
+    // Calculate progress for each category dynamically
+    for (String category in _categoryList) {
       List<String> categoryHabits = _categories[category] ?? [];
       List<String> compoundingInCategory = categoryHabits.where((habit) => _compoundingHabits.contains(habit)).toList();
       
@@ -5772,7 +6298,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ...categoryProgress.entries.map((entry) {
             String category = entry.key;
             double progress = entry.value;
-            Color color = categoryColors[category] ?? Colors.grey;
+            Color color = _getCategoryColor(category);
             
             return Container(
               margin: const EdgeInsets.only(bottom: 12),

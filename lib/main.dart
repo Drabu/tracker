@@ -4079,6 +4079,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ),
           ),
+          const SizedBox(width: 8),
           // Completion checkbox
           GestureDetector(
             onTap: () => _showTimelineEntryStateDialog(entry),
@@ -4094,11 +4095,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 borderRadius: BorderRadius.circular(3),
               ),
               child: isCompleted 
-                ? _getCompletionStatusIcon(entry.completionStatus)
+                ? Center(child: _getCompletionStatusIcon(entry.completionStatus))
                 : null,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 14),
           // Habit icon
           if (habit?.icon.isNotEmpty == true)
             Padding(
@@ -4211,17 +4212,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       case CompletionStatus.none:
         return const SizedBox.shrink();
       case CompletionStatus.onTime:
-        return const Icon(Icons.access_time, color: Colors.white, size: 16);
+        return const Icon(Icons.access_time, color: Colors.white, size: 12);
       case CompletionStatus.completed:
-        return const Icon(Icons.check, color: Colors.white, size: 16);
+        return const Icon(Icons.check, color: Colors.white, size: 12);
       case CompletionStatus.delayed:
-        return const Icon(Icons.schedule, color: Colors.white, size: 16);
+        return const Icon(Icons.schedule, color: Colors.white, size: 12);
       case CompletionStatus.partial:
-        return const Icon(Icons.circle_outlined, color: Colors.white, size: 16);
+        return const Icon(Icons.circle_outlined, color: Colors.white, size: 12);
       case CompletionStatus.missed:
-        return const Icon(Icons.close, color: Colors.white, size: 16);
+        return const Icon(Icons.close, color: Colors.white, size: 12);
       case CompletionStatus.avoided:
-        return const Icon(Icons.block, color: Colors.white, size: 16);
+        return const Icon(Icons.block, color: Colors.white, size: 12);
     }
   }
 
@@ -5162,8 +5163,18 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       'progress': _getCategoryProgress(name, dayIndex),
     }).toList();
     
+    // Filter out categories with no progress
+    final categoriesWithProgress = progressCategories
+        .where((category) => (category['progress'] as double) > 0)
+        .toList();
+    
+    // Don't show the widget if no categories have progress
+    if (categoriesWithProgress.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
     // Sort by progress descending (items with progress appear at top)
-    progressCategories.sort((a, b) => 
+    categoriesWithProgress.sort((a, b) => 
       (b['progress'] as double).compareTo(a['progress'] as double));
 
     return Container(
@@ -5189,7 +5200,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
-          ...progressCategories.map((category) => 
+          ...categoriesWithProgress.map((category) => 
             _buildCategoryProgressItem(
               category['name'] as String,
               category['color'] as Color,

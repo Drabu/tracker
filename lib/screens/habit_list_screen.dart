@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 
 class HabitListScreen extends StatefulWidget {
   final Function(Habit)? onHabitSelected;
@@ -12,7 +13,7 @@ class HabitListScreen extends StatefulWidget {
 }
 
 class _HabitListScreenState extends State<HabitListScreen> {
-  static const String _devUserId = 'dev-user';
+  String get _currentUserId => AuthService.currentUser?.id ?? '';
   List<Habit> _habits = [];
   Set<String> _compoundHabitIds = {};
   bool _isLoading = true;
@@ -47,7 +48,7 @@ class _HabitListScreenState extends State<HabitListScreen> {
 
   Future<void> _loadCompoundHabits() async {
     try {
-      final compoundIds = await ApiService.getUserCompoundHabits(_devUserId);
+      final compoundIds = await ApiService.getUserCompoundHabits(_currentUserId);
       setState(() {
         _compoundHabitIds = compoundIds.toSet();
       });
@@ -58,7 +59,7 @@ class _HabitListScreenState extends State<HabitListScreen> {
 
   Future<void> _toggleCompound(String habitId, bool isCompound) async {
     try {
-      await ApiService.setUserCompoundHabit(_devUserId, habitId, isCompound);
+      await ApiService.setUserCompoundHabit(_currentUserId, habitId, isCompound);
       setState(() {
         if (isCompound) {
           _compoundHabitIds.add(habitId);
@@ -296,6 +297,7 @@ class _HabitListScreenState extends State<HabitListScreen> {
                             itemBuilder: (context, index) {
                               final habit = _habits[index];
                               return Card(
+                                key: ValueKey(habit.id),
                                 child: ListTile(
                                   leading: Row(
                                     mainAxisSize: MainAxisSize.min,

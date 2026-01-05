@@ -273,6 +273,7 @@ class _TimelineConfigScreenState extends State<TimelineConfigScreen> {
                   itemBuilder: (context, index) {
                     final timeline = _timelines[index];
                     return Card(
+                      key: ValueKey(timeline.name),
                       child: ListTile(
                         leading: const Icon(Icons.schedule),
                         title: Text(timeline.name),

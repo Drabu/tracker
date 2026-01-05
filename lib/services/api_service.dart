@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
 class ApiService {
-  static const String _baseUrl = 'http://localhost:8080/api';
+  static const String _prodUrl = 'https://api.rythmn.online/api';
+  static const String _devUrl = 'http://localhost:8080/api';
+  static String get _baseUrl => kReleaseMode ? _prodUrl : _devUrl;
 
   static Future<List<Habit>> getHabits() async {
     final response = await http.get(Uri.parse('$_baseUrl/habits'));
@@ -168,6 +171,19 @@ class ApiService {
       return Timeline.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to update entry status');
+  }
+
+  static Future<Timeline> clearTimelineEntries({
+    required String userId,
+    required String date,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/timelines/clear/entries?userId=$userId&date=$date'),
+    );
+    if (response.statusCode == 200) {
+      return Timeline.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to clear timeline entries');
   }
 
   static Future<List<String>> getUserCompoundHabits(String userId) async {

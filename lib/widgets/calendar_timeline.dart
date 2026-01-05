@@ -407,7 +407,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 100),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: isActive ? 0.9 : 0.85),
+                      color: color.withValues(alpha: isActive ? 0.7 : 0.6),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: isActive 

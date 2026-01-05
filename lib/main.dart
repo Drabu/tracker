@@ -12,8 +12,10 @@ import 'screens/panel_config_screen.dart';
 import 'screens/timeline_config_screen.dart';
 import 'screens/timeline_screen.dart';
 import 'screens/habit_list_screen.dart';
+import 'screens/login_screen.dart';
 import 'models/models.dart';
 import 'services/api_service.dart';
+import 'services/auth_service.dart';
 
 enum HabitState {
   none,
@@ -25,12 +27,33 @@ enum HabitState {
   avoided
 }
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AuthService.init();
   runApp(const DailyTrackerApp());
 }
 
-class DailyTrackerApp extends StatelessWidget {
+class DailyTrackerApp extends StatefulWidget {
   const DailyTrackerApp({super.key});
+
+  @override
+  State<DailyTrackerApp> createState() => _DailyTrackerAppState();
+}
+
+class _DailyTrackerAppState extends State<DailyTrackerApp> {
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  void _checkLoginStatus() {
+    setState(() {
+      _isLoggedIn = AuthService.isLoggedIn;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +76,15 @@ class DailyTrackerApp extends StatelessWidget {
           surface: Color(0xFF161B22),
         ),
       ),
-      home: const DailyTrackerHome(),
+      home: _isLoggedIn
+          ? const DailyTrackerHome()
+          : LoginScreen(
+              onLoginSuccess: () {
+                setState(() {
+                  _isLoggedIn = true;
+                });
+              },
+            ),
     );
   }
 }
@@ -68,7 +99,7 @@ class DailyTrackerHome extends StatefulWidget {
 }
 
 class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProviderStateMixin {
-  static const String _devUserId = 'dev-user';
+  String get _currentUserId => AuthService.currentUser?.id ?? '';
   
   ViewType _currentView = ViewType.day;
   DateTime _selectedDate = DateTime.now();
@@ -81,6 +112,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   Map<String, Habit> _habitsMap = {};
   Timeline? _currentTimeline;
   bool _isLoadingTimeline = false;
+  DateTime _timelineSelectedDate = DateTime.now();
   
   // Dynamic categories and habits loaded from API
   Map<String, List<String>> _categories = {};
@@ -153,6 +185,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return _categoryColors[categoryName] ?? const Color(0xFF58A6FF);
   }
 
+  // Helper to get habit title from ID
+  String _getHabitTitle(String habitId) {
+    return _habitsMap[habitId]?.title ?? habitId;
+  }
+
+  // Helper to get habit from ID
+  Habit? _getHabit(String habitId) {
+    return _habitsMap[habitId];
+  }
+
   void _initializeCategoryColors() {
     _categoryColors = {};
     for (int i = 0; i < _categoryList.length; i++) {
@@ -189,9 +231,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       
       // Add to compounding habits if user marked it as compound
       if (_userCompoundHabitIds.contains(habit.id)) {
-        _compoundingHabits.add(title);
+        _compoundingHabits.add(habit.id);
       }
     }
+  }
+
+  bool _isHabitDisabledById(String habitId, int dayIndex) {
+    if (_isDevelopmentMode) return false;
+    bool isWeekend = dayIndex == 5 || dayIndex == 6;
+    final title = _getHabitTitle(habitId);
+    bool isPrayer = _prayerHabits.contains(title);
+    return !isPrayer && isWeekend;
   }
 
   bool _isHabitDisabled(String habit, int dayIndex) {
@@ -275,6 +325,49 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  void _showHabitStateDialogById(String habitId, int dayIndex) {
+    final habitTitle = _getHabitTitle(habitId);
+    List<HabitState> availableStates = _getAvailableStates(habitTitle);
+    bool isSleepTracking = _sleepTrackingHabits.contains(habitTitle);
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('$habitTitle - ${_weekDays[dayIndex]}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: availableStates.map((state) {
+              int points = _getHabitPoints(habitTitle, state, dayIndex);
+              return ListTile(
+                title: Text(_getStateDisplayName(state)),
+                subtitle: Text('$points points'),
+                onTap: () async {
+                  if (isSleepTracking && state != HabitState.none && state != HabitState.missed) {
+                    if (!mounted) return;
+                    TimeOfDay? selectedTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                    );
+                    
+                    if (selectedTime != null && mounted) {
+                      _updateHabitStateById(habitId, dayIndex, state, selectedTime);
+                      _saveData();
+                    }
+                  } else {
+                    _updateHabitStateById(habitId, dayIndex, state, null);
+                    _saveData();
+                  }
+                  if (mounted) Navigator.of(context).pop();
+                },
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+  }
+
   List<HabitState> _getAvailableStates(String habit) {
     if (habit == 'Mid Day Sleep') {
       return [HabitState.none, HabitState.avoided, HabitState.completed, HabitState.missed];
@@ -316,11 +409,33 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getDailyScore(int dayIndex) {
     int score = 0;
     
-    for (String habit in _habitStatePoints.keys) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    for (String habitTitle in _habitStatePoints.keys) {
+      if (!_isHabitDisabled(habitTitle, dayIndex)) {
+        String? habitId;
+        for (var entry in _habitsMap.entries) {
+          if (entry.value.title == habitTitle) {
+            habitId = entry.key;
+            break;
+          }
+        }
+        // Check timeline entries for completion status
+        HabitState state = HabitState.none;
+        if (habitId != null) {
+          final timelineEntry = _timelineEntries.firstWhere(
+            (e) => e.habitId == habitId,
+            orElse: () => Event(
+              id: '',
+              habit: Habit(id: '', title: '', category: ''),
+              startMinutes: 0,
+              durationMinutes: 0,
+              points: 0,
+              completionStatus: CompletionStatus.none,
+            ),
+          );
+          state = _completionStatusToHabitState(timelineEntry.completionStatus);
+        }
         if (state != HabitState.none) {
-          score += _getHabitPoints(habit, state, dayIndex);
+          score += _getHabitPoints(habitTitle, state, dayIndex);
         }
       }
     }
@@ -457,7 +572,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       onPanDown: (_) => _onUserInteraction(),
       onScaleStart: (_) => _onUserInteraction(),
       child: Scaffold(
-        appBar: _buildAppBar(),
         body: _shouldShowContributionGraph()
             ? Column(
                 children: [
@@ -466,32 +580,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 ],
               )
             : _buildCurrentView(),
-        floatingActionButton: _currentView == ViewType.day ? Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FloatingActionButton(
-              onPressed: () {
-                final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
-                final currentHabit = _getCurrentHabitInAction(todayIndex);
-                print('Current habit: $currentHabit');
-                print('Stored habit: $_currentHabit');
-                print('Time: ${DateTime.now()}');
-              },
-              child: const Icon(Icons.info),
-              tooltip: 'Check Current Habit',
-              backgroundColor: Colors.green,
-              heroTag: "info",
-            ),
-            const SizedBox(height: 10),
-            FloatingActionButton(
-              onPressed: _playAirplaneCallSound,
-              child: const Icon(Icons.volume_up),
-              tooltip: 'Test Habit Change Sound',
-              backgroundColor: Colors.blue,
-              heroTag: "sound",
-            ),
-          ],
-        ) : null,
+        floatingActionButton: _buildFloatingActionButtons(),
       ),
     );
   }
@@ -791,65 +880,53 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   String _getNextHabitName(int nextTransitionMinutes) {
-    // Convert back to hours and minutes for comparison
-    int hours = nextTransitionMinutes ~/ 60;
-    int minutes = nextTransitionMinutes % 60;
+    if (_timelineEntries.isEmpty) return "Next activity";
+    
+    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
     
     // Handle next day case
-    if (hours >= 24) {
-      hours = hours % 24;
+    int searchMinutes = nextTransitionMinutes >= 1440 
+        ? nextTransitionMinutes - 1440 
+        : nextTransitionMinutes;
+    
+    // Find the entry that starts at or after the next transition time
+    for (final entry in sortedEntries) {
+      if (entry.startMinutes >= searchMinutes) {
+        return entry.habitName;
+      }
     }
     
-    // Map transition times to habit names based on current schedule
-    if (hours == 9 && minutes == 0) return "Cold Shower";
-    if (hours == 9 && minutes == 30) return "Morning Quran";
-    if (hours == 9 && minutes == 45) return "Breakfast Time";
-    if (hours == 10 && minutes == 30) return "Deep Focus 1";
-    if (hours == 12 && minutes == 0) return "Guitar Practice";
-    if (hours == 12 && minutes == 20) return "Deep Focus 2";
-    if (hours == 13 && minutes == 30) return "Zuhar Nimaz";
-    if (hours == 13 && minutes == 45) return "Lunch Time";
-    if (hours == 14 && minutes == 30) return "Deep Focus 3";
-    if (hours == 16 && minutes == 0) return "Reset Minute";
-    if (hours == 16 && minutes == 15) return "Deep Focus 4";
-    if (hours == 17 && minutes == 30) return "Asr Nimaz";
-    if (hours == 18 && minutes == 0) return "Chill Time";
-    if (hours == 20 && minutes == 0) return "Hit the Gym";
-    if (hours == 21 && minutes == 0) return "Dinner";
-    if (hours == 23 && minutes == 0) return "Book Reading";
-    if (hours == 2 && minutes == 0) return "Sleep";
+    // If we're past all entries, return the first entry of next day
+    if (sortedEntries.isNotEmpty) {
+      return sortedEntries.first.habitName;
+    }
     
     return "Next activity";
   }
 
   IconData _getNextHabitIcon(int nextTransitionMinutes) {
-    // Convert back to hours and minutes for comparison
-    int hours = nextTransitionMinutes ~/ 60;
-    int minutes = nextTransitionMinutes % 60;
+    if (_timelineEntries.isEmpty) return Icons.access_time;
+    
+    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
+      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
     
     // Handle next day case
-    if (hours >= 24) {
-      hours = hours % 24;
+    int searchMinutes = nextTransitionMinutes >= 1440 
+        ? nextTransitionMinutes - 1440 
+        : nextTransitionMinutes;
+    
+    // Find the entry that starts at or after the next transition time
+    for (final entry in sortedEntries) {
+      if (entry.startMinutes >= searchMinutes) {
+        return _getIconForHabitName(entry.habitName);
+      }
     }
     
-    // Map transition times to icons based on current schedule
-    if (hours == 9 && minutes == 0) return Icons.shower;
-    if (hours == 9 && minutes == 30) return Icons.menu_book;
-    if (hours == 9 && minutes == 45) return Icons.breakfast_dining;
-    if (hours == 10 && minutes == 30) return Icons.work;
-    if (hours == 12 && minutes == 0) return Icons.music_note;
-    if (hours == 12 && minutes == 20) return Icons.work;
-    if (hours == 13 && minutes == 30) return Icons.mosque;
-    if (hours == 13 && minutes == 45) return Icons.lunch_dining;
-    if (hours == 14 && minutes == 30) return Icons.work;
-    if (hours == 16 && minutes == 0) return Icons.refresh;
-    if (hours == 16 && minutes == 15) return Icons.work;
-    if (hours == 17 && minutes == 30) return Icons.mosque;
-    if (hours == 18 && minutes == 0) return Icons.weekend;
-    if (hours == 20 && minutes == 0) return Icons.fitness_center;
-    if (hours == 21 && minutes == 0) return Icons.dinner_dining;
-    if (hours == 23 && minutes == 0) return Icons.book;
-    if (hours == 2 && minutes == 0) return Icons.bedtime;
+    // If we're past all entries, return icon for first entry of next day
+    if (sortedEntries.isNotEmpty) {
+      return _getIconForHabitName(sortedEntries.first.habitName);
+    }
     
     return Icons.access_time;
   }
@@ -1405,6 +1482,35 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _playCompletionSound(state);
   }
 
+  void _updateHabitStateById(String habitId, int dayIndex, HabitState state, TimeOfDay? selectedTime) {
+    // Update habit data keyed by ID (not title) without setState
+    _trackingData[habitId] ??= {};
+    _trackingData[habitId]![_currentWeekKey] ??= {};
+    _trackingData[habitId]![_currentWeekKey]![dayIndex] = state;
+    
+    // Handle time data
+    if (selectedTime != null) {
+      _timeData[habitId] ??= {};
+      _timeData[habitId]![_currentWeekKey] ??= {};
+      _timeData[habitId]![_currentWeekKey]![dayIndex] = selectedTime;
+    } else if (state == HabitState.none || state == HabitState.missed) {
+      _timeData[habitId] ??= {};
+      _timeData[habitId]![_currentWeekKey] ??= {};
+      _timeData[habitId]![_currentWeekKey]![dayIndex] = null;
+    }
+    
+    // Update specific progress values using habit title for lookups
+    final habitTitle = _getHabitTitle(habitId);
+    _updateProgressNotifiers(habitTitle);
+    _animateSpecificProgress(habitTitle);
+    
+    // Play sound for completion states
+    _playCompletionSound(state);
+    
+    // Persist data
+    _saveData();
+  }
+
   void _updateProgressNotifiers(String habit) {
     // Update points notifier
     int currentDayIndex = DateTime.now().weekday - 1;
@@ -1425,16 +1531,43 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     setState(() {});
   }
 
+  void _refreshAllNotifiers() {
+    int currentDayIndex = DateTime.now().weekday - 1;
+    _pointsNotifier.value = _getDailyScore(currentDayIndex);
+    _compoundProgressNotifier.value = _getCompoundProgress(currentDayIndex);
+    
+    Map<String, double> categoryProgress = {};
+    for (String categoryName in _categories.keys) {
+      categoryProgress[categoryName] = _getCategoryProgress(categoryName, currentDayIndex);
+    }
+    _categoryProgressNotifier.value = categoryProgress;
+  }
+
   double _getCompoundProgress(int dayIndex) {
-    List<String> compoundHabits = _compoundingHabits.toList();
+    List<String> compoundHabitIds = _compoundingHabits.toList();
     int completedCount = 0;
     int totalCount = 0;
     
-    for (String habit in compoundHabits) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
+    for (String habitId in compoundHabitIds) {
+      if (!_isHabitDisabledById(habitId, dayIndex)) {
         totalCount++;
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+        // Check timeline entries for completion status
+        final entry = _timelineEntries.firstWhere(
+          (e) => e.habitId == habitId,
+          orElse: () => Event(
+            id: '',
+            habit: Habit(id: '', title: '', category: ''),
+            startMinutes: 0,
+            durationMinutes: 0,
+            points: 0,
+            completionStatus: CompletionStatus.none,
+          ),
+        );
+        final status = entry.completionStatus;
+        if (status == CompletionStatus.completed || 
+            status == CompletionStatus.onTime || 
+            status == CompletionStatus.delayed || 
+            status == CompletionStatus.partial) {
           completedCount++;
         }
       }
@@ -1444,15 +1577,30 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   double _getCategoryProgress(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habitIds = _categories[categoryName] ?? [];
     int completed = 0;
     int total = 0;
     
-    for (String habit in habits) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
+    for (String habitId in habitIds) {
+      if (!_isHabitDisabledById(habitId, dayIndex)) {
         total++;
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+        // Check timeline entries for completion status
+        final entry = _timelineEntries.firstWhere(
+          (e) => e.habitId == habitId,
+          orElse: () => Event(
+            id: '',
+            habit: Habit(id: '', title: '', category: ''),
+            startMinutes: 0,
+            durationMinutes: 0,
+            points: 0,
+            completionStatus: CompletionStatus.none,
+          ),
+        );
+        final status = entry.completionStatus;
+        if (status == CompletionStatus.completed || 
+            status == CompletionStatus.onTime || 
+            status == CompletionStatus.delayed || 
+            status == CompletionStatus.partial) {
           completed++;
         }
       }
@@ -1463,7 +1611,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   void _animateSpecificProgress(String habitName) {
     // Determine which progress sections need to update based on the habit
-    bool updateCompound = _compoundingHabits.contains(habitName);
+    // Look up habit ID from title to check compounding status
+    String? habitId;
+    for (var entry in _habitsMap.entries) {
+      if (entry.value.title == habitName) {
+        habitId = entry.key;
+        break;
+      }
+    }
+    bool updateCompound = habitId != null && _compoundingHabits.contains(habitId);
     bool updateCategory = true; // Categories always update since every habit belongs to one
     
     if (updateCompound) {
@@ -1739,6 +1895,20 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
+  bool _isSelectedDateToday() {
+    final now = DateTime.now();
+    return _timelineSelectedDate.year == now.year &&
+           _timelineSelectedDate.month == now.month &&
+           _timelineSelectedDate.day == now.day;
+  }
+
+  String _formatSelectedDateLabel() {
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final weekday = weekdays[_timelineSelectedDate.weekday - 1];
+    return '$weekday, ${months[_timelineSelectedDate.month - 1]} ${_timelineSelectedDate.day}';
+  }
+
   Future<void> _loadTodaysTimeline() async {
     setState(() {
       _isLoadingTimeline = true;
@@ -1749,7 +1919,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       final results = await Future.wait([
         ApiService.getHabits(),
         ApiService.getCategories(),
-        ApiService.getUserCompoundHabits(_devUserId),
+        ApiService.getUserCompoundHabits(_currentUserId),
       ]);
       
       final habits = results[0] as List<Habit>;
@@ -1760,21 +1930,21 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       _categoryList = categories;
       _userCompoundHabitIds = compoundHabitIds.toSet();
       
-      // Build _categories map from habits
+      // Build _categories map from habits (using habit IDs, not titles)
       _categories = {};
       for (var habit in habits) {
         if (!_categories.containsKey(habit.category)) {
           _categories[habit.category] = [];
         }
-        _categories[habit.category]!.add(habit.title);
+        _categories[habit.category]!.add(habit.id);
       }
       
       // Initialize colors and habit sets
       _initializeCategoryColors();
       _initializeHabitSets();
 
-      final dateStr = _formatDateForApi(DateTime.now());
-      final timeline = await ApiService.getTimelineByDate(_devUserId, dateStr);
+      final dateStr = _formatDateForApi(_timelineSelectedDate);
+      final timeline = await ApiService.getTimelineByDate(_currentUserId, dateStr);
       
       setState(() {
         _currentTimeline = timeline;
@@ -1782,6 +1952,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _isLoadingTimeline = false;
         _isLoadingCategories = false;
       });
+      
+      // Update notifiers now that _habitsMap is loaded
+      _refreshAllNotifiers();
     } catch (e) {
       print('Error loading timeline: $e');
       setState(() {
@@ -1817,12 +1990,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _timelineEntries = updatedTimeline.entries;
       });
       
-      // Sync with habit tracking state
-      final habitName = entry.habitName;
-      if (habitName.isNotEmpty) {
+      // Sync with habit tracking state using habit ID for consistency
+      final habitId = entry.habitId;
+      if (habitId.isNotEmpty) {
         final habitState = _completionStatusToHabitState(status);
         final dayIndex = DateTime.now().weekday - 1;
-        _updateHabitState(habitName, dayIndex, habitState, null);
+        _updateHabitStateById(habitId, dayIndex, habitState, null);
       }
     } catch (e) {
       print('Error updating entry status: $e');
@@ -1909,6 +2082,194 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _saveData(); // Save current week
   }
 
+  Widget? _buildFloatingActionButtons() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_currentView == ViewType.day) ...[
+          FloatingActionButton(
+            onPressed: _showDatePicker,
+            tooltip: 'Select Date',
+            backgroundColor: const Color(0xFF58A6FF),
+            heroTag: "datePicker",
+            child: const Icon(Icons.calendar_today),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton(
+            onPressed: () {
+              final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
+              final currentHabit = _getCurrentHabitInAction(todayIndex);
+              print('Current habit: $currentHabit');
+              print('Stored habit: $_currentHabit');
+              print('Time: ${DateTime.now()}');
+            },
+            tooltip: 'Check Current Habit',
+            backgroundColor: Colors.green,
+            heroTag: "info",
+            child: const Icon(Icons.info),
+          ),
+          const SizedBox(height: 10),
+          FloatingActionButton(
+            onPressed: _playAirplaneCallSound,
+            tooltip: 'Test Habit Change Sound',
+            backgroundColor: Colors.blue,
+            heroTag: "sound",
+            child: const Icon(Icons.volume_up),
+          ),
+          const SizedBox(height: 10),
+        ],
+        FloatingActionButton(
+          onPressed: () {
+            _showSettingsMenu(context);
+          },
+          tooltip: 'Settings',
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          heroTag: "settings",
+          child: const Icon(Icons.settings),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showDatePicker() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _timelineSelectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFF58A6FF),
+              surface: Color(0xFF161B22),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && picked != _timelineSelectedDate) {
+      setState(() {
+        _timelineSelectedDate = picked;
+      });
+      _loadTodaysTimeline();
+    }
+  }
+
+  void _showSettingsMenu(BuildContext context) {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(
+          MediaQuery.of(context).size.width - 200,
+          MediaQuery.of(context).size.height - 300,
+          0,
+          0,
+        ),
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        const PopupMenuItem(
+          value: 'timeline',
+          child: Row(
+            children: [
+              Icon(Icons.schedule, size: 20),
+              SizedBox(width: 12),
+              Text('Daily Timeline'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'habits',
+          child: Row(
+            children: [
+              Icon(Icons.list_alt, size: 20),
+              SizedBox(width: 12),
+              Text('Manage Habits'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'panels',
+          child: Row(
+            children: [
+              Icon(Icons.dashboard, size: 20),
+              SizedBox(width: 12),
+              Text('Configure Panels'),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'timelines',
+          child: Row(
+            children: [
+              Icon(Icons.tune, size: 20),
+              SizedBox(width: 12),
+              Text('Configure Timelines'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout, size: 20, color: Colors.redAccent),
+              SizedBox(width: 12),
+              Text('Logout', style: TextStyle(color: Colors.redAccent)),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'timeline') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => TimelineScreen(userId: _currentUserId)),
+        ).then((_) => _loadTodaysTimeline());
+      } else if (value == 'habits') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const HabitListScreen()),
+        );
+      } else if (value == 'panels') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PanelConfigScreen()),
+        );
+      } else if (value == 'timelines') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const TimelineConfigScreen()),
+        );
+      } else if (value == 'logout') {
+        _handleLogout();
+      }
+    });
+  }
+
+  Future<void> _handleLogout() async {
+    await AuthService.signOut();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (context) => LoginScreen(
+            onLoginSuccess: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (context) => const DailyTrackerHome()),
+              );
+            },
+          ),
+        ),
+        (route) => false,
+      );
+    }
+  }
+
   PreferredSizeWidget _buildAppBar() {
     String title = _getViewTitle();
     return AppBar(
@@ -1948,8 +2309,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             if (value == 'timeline') {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const TimelineScreen(userId: 'dev-user')),
-              );
+                MaterialPageRoute(builder: (context) => TimelineScreen(userId: _currentUserId)),
+              ).then((_) => _loadTodaysTimeline());
             } else if (value == 'habits') {
               Navigator.push(
                 context,
@@ -2448,7 +2809,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 16),
           _buildAppleFitnessStyleCard(dayIndex),
           const SizedBox(height: 24),
-          _buildActivityRingsWidget(dayIndex),
+          _buildDailyPointsCard(dayIndex),
           const SizedBox(height: 24),
           _buildWeeklyStreakCard(),
           const SizedBox(height: 24),
@@ -2978,7 +3339,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Row(
             children: [
               Text(
-                'TODAY\'S PERFORMANCE',
+                '${AuthService.currentUser?.name.toUpperCase() ?? 'TODAY'}\'S PERFORMANCE',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -3391,9 +3752,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'Today\'s Schedule',
-                style: TextStyle(
+              Text(
+                _isSelectedDateToday() ? 'Today\'s Schedule' : _formatSelectedDateLabel(),
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: Colors.white,
@@ -3827,12 +4188,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildFocusCategoryCard(String categoryName, Color categoryColor, int dayIndex) {
-    List<String> categoryHabits = _categories[categoryName] ?? [];
+    List<String> categoryHabitIds = _categories[categoryName] ?? [];
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     // Filter habits for weekends
-    List<String> availableHabits = categoryHabits.where((habit) {
-      return !_isHabitDisabled(habit, dayIndex);
+    List<String> availableHabitIds = categoryHabitIds.where((habitId) {
+      return !_isHabitDisabledById(habitId, dayIndex);
     }).toList();
 
     return Container(
@@ -3871,7 +4232,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ],
           ),
           const SizedBox(height: 16),
-          if (availableHabits.isEmpty)
+          if (availableHabitIds.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
@@ -3884,14 +4245,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             )
           else
-            ...availableHabits.map((habit) => _buildTaskItem(habit, dayIndex)),
+            ...availableHabitIds.map((habitId) => _buildTaskItem(habitId, dayIndex)),
         ],
       ),
     );
   }
 
-  Widget _buildTaskItem(String habitName, int dayIndex) {
-    HabitState currentState = _trackingData[habitName]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+  Widget _buildTaskItem(String habitId, int dayIndex) {
+    final habitTitle = _getHabitTitle(habitId);
+    HabitState currentState = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
     bool isCompleted = currentState == HabitState.completed || 
                       currentState == HabitState.onTime || 
                       currentState == HabitState.delayed ||
@@ -3899,11 +4261,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                       currentState == HabitState.avoided;
     
     return Container(
+      key: ValueKey('task_${habitId}_$dayIndex'),
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => _showHabitStateDialog(habitName, dayIndex),
+            onTap: () => _showHabitStateDialogById(habitId, dayIndex),
             child: Container(
               width: 20,
               height: 20,
@@ -3923,9 +4286,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(width: 12),
           Expanded(
             child: GestureDetector(
-              onTap: () => _showHabitStateDialog(habitName, dayIndex),
+              onTap: () => _showHabitStateDialogById(habitId, dayIndex),
               child: Text(
-                habitName,
+                habitTitle,
                 style: TextStyle(
                   fontSize: 16,
                   color: isCompleted 
@@ -3945,7 +4308,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '+${_getHabitPoints(habitName, currentState, dayIndex)}',
+                '+${_getHabitPoints(habitTitle, currentState, dayIndex)}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -3982,18 +4345,154 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  Widget _buildDailyPointsCard(int dayIndex) {
+    int earnedPoints = 0;
+    int maxPoints = 0;
+    
+    for (final entry in _timelineEntries) {
+      maxPoints += entry.points;
+      if (entry.completionStatus == CompletionStatus.completed ||
+          entry.completionStatus == CompletionStatus.onTime) {
+        earnedPoints += entry.points;
+      } else if (entry.completionStatus == CompletionStatus.delayed ||
+                 entry.completionStatus == CompletionStatus.partial) {
+        earnedPoints += (entry.points * 0.5).round();
+      }
+    }
+    
+    double percentage = maxPoints > 0 ? earnedPoints / maxPoints : 0.0;
+    
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2A2D3A),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: _getScoreColor(percentage),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'DAILY POINTS',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.9),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _getScoreColor(percentage).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _getScoreColor(percentage).withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.stars_rounded,
+                      color: _getScoreColor(percentage),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$earnedPoints',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _getScoreColor(percentage),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '$earnedPoints of $maxPoints points',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
+                ),
+              ),
+              Text(
+                '${(percentage * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: _getScoreColor(percentage),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            height: 8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(4),
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            child: FractionallySizedBox(
+              alignment: Alignment.centerLeft,
+              widthFactor: percentage.clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: LinearGradient(
+                    colors: [
+                      _getScoreColor(percentage),
+                      _getScoreColor(percentage).withValues(alpha: 0.7),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCompoundHabitsProgressCard(int dayIndex) {
     return ValueListenableBuilder<double>(
       valueListenable: _compoundProgressNotifier,
       builder: (context, progress, child) {
-        List<String> compoundHabits = _compoundingHabits.toList();
+        List<String> compoundHabitIds = _compoundingHabits.toList();
         int completedCount = 0;
         int totalCount = 0;
         
-        for (String habit in compoundHabits) {
-          if (!_isHabitDisabled(habit, dayIndex)) {
+        for (String habitId in compoundHabitIds) {
+          final habitTitle = _getHabitTitle(habitId);
+          if (!_isHabitDisabled(habitTitle, dayIndex)) {
             totalCount++;
-            HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            HabitState state = _trackingData[habitTitle]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
             if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
               completedCount++;
             }
@@ -4123,13 +4622,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   String _getCompoundHabitsNames(int dayIndex, int completedCount) {
     List<String> completedHabits = [];
-    List<String> compoundHabits = _compoundingHabits.toList();
+    List<String> compoundHabitIds = _compoundingHabits.toList();
     
-    for (String habit in compoundHabits) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    for (String habitId in compoundHabitIds) {
+      final habitTitle = _getHabitTitle(habitId);
+      if (!_isHabitDisabled(habitTitle, dayIndex)) {
+        HabitState state = _trackingData[habitTitle]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
-          completedHabits.add(habit);
+          completedHabits.add(habitTitle);
         }
       }
     }
@@ -4598,11 +5098,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildCategoryProgressSection(int dayIndex) {
-    // Build progress categories dynamically
+    // Build progress categories dynamically with progress values for sorting
     final progressCategories = _categoryList.map((name) => {
       'name': name,
       'color': _getCategoryColor(name),
+      'progress': _getCategoryProgress(name, dayIndex),
     }).toList();
+    
+    // Sort by progress descending (items with progress appear at top)
+    progressCategories.sort((a, b) => 
+      (b['progress'] as double).compareTo(a['progress'] as double));
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -4700,12 +5205,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryCompletedCount(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habitIds = _categories[categoryName] ?? [];
     int completed = 0;
     
-    for (String habit in habits) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    for (String habitId in habitIds) {
+      if (!_isHabitDisabledById(habitId, dayIndex)) {
+        HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completed++;
         }
@@ -4715,11 +5220,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryTotalCount(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habitIds = _categories[categoryName] ?? [];
     int total = 0;
     
-    for (String habit in habits) {
-      if (!_isHabitDisabled(habit, dayIndex)) {
+    for (String habitId in habitIds) {
+      if (!_isHabitDisabledById(habitId, dayIndex)) {
         total++;
       }
     }
@@ -4822,16 +5327,18 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  Widget _buildDailyHabitItem(String habit, int dayIndex) {
-    bool isDisabled = _isHabitDisabled(habit, dayIndex);
-    bool isSleepTracking = _sleepTrackingHabits.contains(habit);
+  Widget _buildDailyHabitItem(String habitId, int dayIndex) {
+    final habitTitle = _getHabitTitle(habitId);
+    bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
+    bool isSleepTracking = _sleepTrackingHabits.contains(habitTitle);
     
-    HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-    int points = _habitStatePoints[habit]?[state] ?? 0;
-    int maxPoints = _getMaxHabitPoints(habit);
-    TimeOfDay? time = _timeData[habit]?[_currentWeekKey]?[dayIndex];
+    HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    int points = _habitStatePoints[habitTitle]?[state] ?? 0;
+    int maxPoints = _getMaxHabitPoints(habitTitle);
+    TimeOfDay? time = _timeData[habitId]?[_currentWeekKey]?[dayIndex];
     
     return Container(
+      key: ValueKey('${habitId}_$dayIndex'),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: Colors.grey.shade800, width: 0.5),
@@ -4840,7 +5347,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: GestureDetector(
-          onTap: isDisabled ? null : () => _showHabitStateDialog(habit, dayIndex),
+          onTap: isDisabled ? null : () => _showHabitStateDialogById(habitId, dayIndex),
           child: Container(
             width: 24,
             height: 24,
@@ -4857,7 +5364,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              habit,
+              habitTitle,
               style: TextStyle(
                 color: isDisabled ? Colors.grey.shade600 : Colors.white,
                 fontWeight: FontWeight.w500,
@@ -4909,6 +5416,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         const SizedBox(height: 24),
         ..._categories.entries.map((entry) {
           return Column(
+            key: ValueKey(entry.key),
             children: [
               _buildWeekCategorySection(entry.key, entry.value),
               const SizedBox(height: 16),
@@ -5623,18 +6131,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryScore(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habitIds = _categories[categoryName] ?? [];
     
     int currentScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
-    for (String habit in habits) {
-      bool isDisabled = _isHabitDisabled(habit, dayIndex);
+    for (String habitId in habitIds) {
+      bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
       
       if (!isDisabled) {
-        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        final habitTitle = _getHabitTitle(habitId);
+        HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state != HabitState.none) {
-          currentScore += _habitStatePoints[habit]?[state] ?? 0;
+          currentScore += _habitStatePoints[habitTitle]?[state] ?? 0;
         }
       }
     }
@@ -5642,16 +6151,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryMaxScore(String categoryName, int dayIndex) {
-    List<String> habits = _categories[categoryName] ?? [];
+    List<String> habitIds = _categories[categoryName] ?? [];
     
     int maxScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
-    for (String habit in habits) {
-      bool isDisabled = _isHabitDisabled(habit, dayIndex);
+    for (String habitId in habitIds) {
+      bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
       
       if (!isDisabled) {
-        maxScore += _getMaxHabitPoints(habit);
+        final habitTitle = _getHabitTitle(habitId);
+        maxScore += _getMaxHabitPoints(habitTitle);
       }
     }
     return maxScore;
@@ -6173,7 +6683,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
   // Compounding Habits Chart Widget
   Widget _buildCompoundingHabitsChart(int dayIndex) {
-    List<String> compoundingHabitsList = _compoundingHabits.toList();
+    List<String> compoundingHabitIdsList = _compoundingHabits.toList();
     int completedCount = 0;
     int totalCount = 0;
     
@@ -6181,8 +6691,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     
     // Calculate progress for each category dynamically
     for (String category in _categoryList) {
-      List<String> categoryHabits = _categories[category] ?? [];
-      List<String> compoundingInCategory = categoryHabits.where((habit) => _compoundingHabits.contains(habit)).toList();
+      List<String> categoryHabitIds = _categories[category] ?? [];
+      List<String> compoundingInCategory = categoryHabitIds.where((habitId) => _compoundingHabits.contains(habitId)).toList();
       
       if (compoundingInCategory.isNotEmpty) {
         int categoryCompleted = 0;
@@ -6190,12 +6700,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         
         bool isWeekend = dayIndex == 5 || dayIndex == 6;
         
-        for (String habit in compoundingInCategory) {
-          bool isDisabled = _isHabitDisabled(habit, dayIndex);
+        for (String habitId in compoundingInCategory) {
+          bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
           
           if (!isDisabled) {
             totalCount++;
-            HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
             if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
               completedCount++;
               categoryCompleted++;

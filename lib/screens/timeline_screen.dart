@@ -124,13 +124,18 @@ class _TimelineScreenState extends State<TimelineScreen> {
     if (confirmed != true || !mounted) return;
     
     try {
-      final duplicatedEntries = _entries.map((e) => Event(
-        id: DateTime.now().millisecondsSinceEpoch.toString() + e.habitId,
-        habit: e.habit,
-        startMinutes: e.startMinutes,
-        durationMinutes: e.durationMinutes,
-        points: e.points,
-      )).toList();
+      final baseTimestamp = DateTime.now().millisecondsSinceEpoch;
+      var index = 0;
+      final duplicatedEntries = _entries.map((e) {
+        final entryId = '${baseTimestamp}_${index++}_${e.habitId}_${e.startMinutes}';
+        return Event(
+          id: entryId,
+          habit: e.habit,
+          startMinutes: e.startMinutes,
+          durationMinutes: e.durationMinutes,
+          points: e.points,
+        );
+      }).toList();
       
       await ApiService.saveTimeline(
         userId: widget.userId,
@@ -147,6 +152,50 @@ class _TimelineScreenState extends State<TimelineScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error duplicating: $e')),
+        );
+      }
+    }
+  }
+
+  void _showClearTimelineDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear Timeline'),
+        content: Text(
+          'Delete all ${_entries.length} entries from ${_formatDate(_selectedDate)}?\n\nThis action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ApiService.clearTimelineEntries(
+        userId: widget.userId,
+        date: _formatDate(_selectedDate),
+      );
+      setState(() => _entries = []);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Timeline cleared')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error clearing timeline: $e')),
         );
       }
     }
@@ -280,11 +329,12 @@ class _TimelineScreenState extends State<TimelineScreen> {
               ElevatedButton(
                 onPressed: points <= _remainingPoints && isValidDuration
                     ? () {
+                        final entryStartMinutes = startHour * 60 + startMinute;
                         setState(() {
                           _entries.add(Event(
-                            id: DateTime.now().millisecondsSinceEpoch.toString(),
+                            id: '${DateTime.now().millisecondsSinceEpoch}_${habit.id}_$entryStartMinutes',
                             habit: habit,
-                            startMinutes: startHour * 60 + startMinute,
+                            startMinutes: entryStartMinutes,
                             durationMinutes: duration,
                             points: points,
                           ));
@@ -554,7 +604,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                     ? () {
                         setState(() {
                           _entries.add(Event(
-                            id: DateTime.now().millisecondsSinceEpoch.toString(),
+                            id: '${DateTime.now().millisecondsSinceEpoch}_${habit.id}_$startMinutes',
                             habit: habit,
                             startMinutes: startMinutes,
                             durationMinutes: duration,
@@ -589,6 +639,11 @@ class _TimelineScreenState extends State<TimelineScreen> {
       appBar: AppBar(
         title: const Text('Timeline'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Clear all entries',
+            onPressed: _entries.isEmpty ? null : _showClearTimelineDialog,
+          ),
           IconButton(
             icon: const Icon(Icons.copy),
             tooltip: 'Duplicate to another day',

@@ -16,6 +16,7 @@ import 'screens/login_screen.dart';
 import 'models/models.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'widgets/expandable_sidebar.dart';
 
 enum HabitState {
   none,
@@ -572,15 +573,58 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       onPanDown: (_) => _onUserInteraction(),
       onScaleStart: (_) => _onUserInteraction(),
       child: Scaffold(
-        body: _shouldShowContributionGraph()
-            ? Column(
-                children: [
-                  _buildContributionGraph(),
-                  Expanded(child: _buildCurrentView()),
+        body: Stack(
+          children: [
+            _shouldShowContributionGraph()
+                ? Column(
+                    children: [
+                      _buildContributionGraph(),
+                      Expanded(child: _buildCurrentView()),
+                    ],
+                  )
+                : _buildCurrentView(),
+            if (_currentView == ViewType.day)
+              ExpandableSidebar(
+                items: [
+                  SidebarItem(
+                    icon: Icons.calendar_today,
+                    label: 'Select Date',
+                    color: const Color(0xFF58A6FF),
+                    onTap: _showDatePicker,
+                  ),
+                  SidebarItem(
+                    icon: Icons.timeline,
+                    label: 'Timeline',
+                    color: Colors.green,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) =>
+                              TimelineScreen(userId: _currentUserId),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                            return FadeTransition(opacity: animation, child: child);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  SidebarItem(
+                    icon: Icons.volume_up,
+                    label: 'Test Sound',
+                    color: Colors.blue,
+                    onTap: _playAirplaneCallSound,
+                  ),
+                  SidebarItem(
+                    icon: Icons.logout,
+                    label: 'Logout',
+                    color: Colors.redAccent,
+                    onTap: _handleLogout,
+                  ),
                 ],
-              )
-            : _buildCurrentView(),
-        floatingActionButton: _buildFloatingActionButtons(),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2122,6 +2166,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           heroTag: "sound",
           child: const Icon(Icons.volume_up),
         ),
+        const SizedBox(height: 10),
+        FloatingActionButton(
+          onPressed: _handleLogout,
+          tooltip: 'Logout',
+          backgroundColor: Colors.redAccent,
+          heroTag: "logout",
+          child: const Icon(Icons.logout),
+        ),
       ],
     );
   }
@@ -2767,7 +2819,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildTabletDashboard(int todayIndex, int currentScore) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(left: 24, top: 24, bottom: 24, right: 88),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

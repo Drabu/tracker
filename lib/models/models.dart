@@ -199,8 +199,16 @@ class Event {
   int get endHour => endMinutes ~/ 60;
   int get endMinute => endMinutes % 60;
   
-  String get startTimeFormatted => '${startHour.toString().padLeft(2, '0')}:${startMinute.toString().padLeft(2, '0')}';
-  String get endTimeFormatted => '${endHour.toString().padLeft(2, '0')}:${endMinute.toString().padLeft(2, '0')}';
+  String get startTimeFormatted {
+    final hour12 = startHour == 0 ? 12 : (startHour > 12 ? startHour - 12 : startHour);
+    final period = startHour < 12 ? 'AM' : 'PM';
+    return '$hour12:${startMinute.toString().padLeft(2, '0')} $period';
+  }
+  String get endTimeFormatted {
+    final hour12 = endHour == 0 ? 12 : (endHour > 12 ? endHour - 12 : endHour);
+    final period = endHour < 12 ? 'AM' : 'PM';
+    return '$hour12:${endMinute.toString().padLeft(2, '0')} $period';
+  }
   String get durationFormatted {
     final hours = durationMinutes ~/ 60;
     final mins = durationMinutes % 60;

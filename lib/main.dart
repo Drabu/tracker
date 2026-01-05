@@ -2083,49 +2083,44 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget? _buildFloatingActionButtons() {
+    if (_currentView != ViewType.day) return null;
+    
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (_currentView == ViewType.day) ...[
-          FloatingActionButton(
-            onPressed: _showDatePicker,
-            tooltip: 'Select Date',
-            backgroundColor: const Color(0xFF58A6FF),
-            heroTag: "datePicker",
-            child: const Icon(Icons.calendar_today),
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton(
-            onPressed: () {
-              final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
-              final currentHabit = _getCurrentHabitInAction(todayIndex);
-              print('Current habit: $currentHabit');
-              print('Stored habit: $_currentHabit');
-              print('Time: ${DateTime.now()}');
-            },
-            tooltip: 'Check Current Habit',
-            backgroundColor: Colors.green,
-            heroTag: "info",
-            child: const Icon(Icons.info),
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton(
-            onPressed: _playAirplaneCallSound,
-            tooltip: 'Test Habit Change Sound',
-            backgroundColor: Colors.blue,
-            heroTag: "sound",
-            child: const Icon(Icons.volume_up),
-          ),
-          const SizedBox(height: 10),
-        ],
+        FloatingActionButton(
+          onPressed: _showDatePicker,
+          tooltip: 'Select Date',
+          backgroundColor: const Color(0xFF58A6FF),
+          heroTag: "datePicker",
+          child: const Icon(Icons.calendar_today),
+        ),
+        const SizedBox(height: 10),
         FloatingActionButton(
           onPressed: () {
-            _showSettingsMenu(context);
+            Navigator.push(
+              context,
+              PageRouteBuilder(
+                pageBuilder: (context, animation, secondaryAnimation) => 
+                    TimelineScreen(userId: _currentUserId),
+                transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
+              ),
+            );
           },
-          tooltip: 'Settings',
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          heroTag: "settings",
-          child: const Icon(Icons.settings),
+          tooltip: 'Daily Timeline',
+          backgroundColor: Colors.green,
+          heroTag: "timeline",
+          child: const Icon(Icons.timeline),
+        ),
+        const SizedBox(height: 10),
+        FloatingActionButton(
+          onPressed: _playAirplaneCallSound,
+          tooltip: 'Test Habit Change Sound',
+          backgroundColor: Colors.blue,
+          heroTag: "sound",
+          child: const Icon(Icons.volume_up),
         ),
       ],
     );
@@ -2256,14 +2251,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     await AuthService.signOut();
     if (mounted) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (context) => LoginScreen(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => LoginScreen(
             onLoginSuccess: () {
               Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (context) => const DailyTrackerHome()),
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) => const DailyTrackerHome(),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  transitionDuration: const Duration(milliseconds: 300),
+                ),
               );
             },
           ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 300),
         ),
         (route) => false,
       );

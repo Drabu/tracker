@@ -380,7 +380,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
       final startY = (displayStartMinutes / 60) * hourHeight;
       final height = ((displayEndMinutes - displayStartMinutes) / 60 * hourHeight).clamp(20.0, double.infinity);
       
-      final color = _getCategoryColor(habit?.category ?? 'default');
+      final color = _getPointsBasedColor(entry.points);
       final isHovered = _hoveredEntryIndex == index;
       
       widgets.add(
@@ -660,6 +660,36 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     final period = hour >= 12 ? 'PM' : 'AM';
     final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
     return '$hour12:${minute.toString().padLeft(2, '0')} $period';
+  }
+
+  Color _getPointsBasedColor(int points) {
+    // Higher points = darker/more intense color, lower points = lighter
+    // Points typically range from 1-50, normalize to 0-1
+    final normalized = (points.clamp(1, 50) - 1) / 49.0;
+    
+    // Use different hues based on point ranges, darker for higher points
+    if (points <= 5) {
+      // Light teal
+      return HSLColor.fromAHSL(1.0, 180, 0.5, 0.65 - (normalized * 0.2)).toColor();
+    } else if (points <= 10) {
+      // Green
+      return HSLColor.fromAHSL(1.0, 140, 0.6, 0.55 - (normalized * 0.15)).toColor();
+    } else if (points <= 15) {
+      // Yellow-green
+      return HSLColor.fromAHSL(1.0, 80, 0.65, 0.50 - (normalized * 0.1)).toColor();
+    } else if (points <= 20) {
+      // Orange
+      return HSLColor.fromAHSL(1.0, 35, 0.75, 0.50 - (normalized * 0.1)).toColor();
+    } else if (points <= 30) {
+      // Red-orange
+      return HSLColor.fromAHSL(1.0, 15, 0.75, 0.45 - (normalized * 0.1)).toColor();
+    } else if (points <= 40) {
+      // Purple
+      return HSLColor.fromAHSL(1.0, 280, 0.6, 0.40 - (normalized * 0.1)).toColor();
+    } else {
+      // Deep blue
+      return HSLColor.fromAHSL(1.0, 220, 0.7, 0.35 - (normalized * 0.1)).toColor();
+    }
   }
 
   Color _getCategoryColor(String category) {

@@ -576,6 +576,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       onScaleStart: (_) => _onUserInteraction(),
       child: Scaffold(
         body: Stack(
+          fit: StackFit.expand,
           children: [
             _shouldShowContributionGraph()
                 ? Column(

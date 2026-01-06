@@ -13,10 +13,12 @@ import 'screens/timeline_config_screen.dart';
 import 'screens/timeline_screen.dart';
 import 'screens/habit_list_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/contest_screen.dart';
 import 'models/models.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
 import 'widgets/expandable_sidebar.dart';
+import 'widgets/contests_dashboard_widget.dart' show ContestsDashboardWidget, contestRefreshNotifier;
 
 enum HabitState {
   none,
@@ -602,6 +604,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         PageRouteBuilder(
                           pageBuilder: (context, animation, secondaryAnimation) =>
                               TimelineScreen(userId: _currentUserId),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                            return FadeTransition(opacity: animation, child: child);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                  SidebarItem(
+                    icon: Icons.emoji_events,
+                    label: 'Contests',
+                    color: const Color(0xFFFFD700),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) =>
+                              const ContestScreen(),
                           transitionsBuilder: (context, animation, secondaryAnimation, child) {
                             return FadeTransition(opacity: animation, child: child);
                           },
@@ -2034,6 +2053,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _timelineEntries = updatedTimeline.entries;
       });
       
+      // Refresh contests to show updated scores
+      contestRefreshNotifier.refresh();
+      
       // Sync with habit tracking state using habit ID for consistency
       final habitId = entry.habitId;
       if (habitId.isNotEmpty) {
@@ -2813,6 +2835,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _buildTodaysFocusSection(todayIndex),
         const SizedBox(height: 24),
         _buildYourProgressSection(todayIndex, currentScore),
+        const SizedBox(height: 24),
+        const ContestsDashboardWidget(),
       ],
     );
   }
@@ -2867,8 +2891,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           _buildAppleFitnessStyleCard(dayIndex),
           const SizedBox(height: 24),
           _buildDailyPointsCard(dayIndex),
-          const SizedBox(height: 24),
-          _buildWeeklyStreakCard(),
           const SizedBox(height: 24),
         ],
       ),
@@ -3069,279 +3091,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       },
     );
   }
-
-  Widget _buildWeeklyStreakCard() {
-    int bestDailyScore = _getBestDailyScore();
-    int todayScore = _getDailyScore(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
-    bool achievedBest = todayScore >= bestDailyScore && todayScore > 0;
-    
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF2A2D3A),
-            const Color(0xFF1E212E).withValues(alpha: 0.85),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFFD700), Color(0xFFFF9F0A)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.4),
-                      blurRadius: 8,
-                      spreadRadius: 2,
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  achievedBest ? Icons.emoji_events : Icons.workspace_premium,
-                  color: Colors.white,
-                  size: 16,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'PERSONAL RECORDS',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white.withValues(alpha: 0.7),
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const Spacer(),
-              if (achievedBest)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFD700).withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: const Color(0xFFFFD700).withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Text(
-                    'NEW RECORD!',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: const Color(0xFFFFD700),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: _buildRecordItem(
-                  value: bestDailyScore,
-                  label: 'BEST DAILY SCORE',
-                  icon: Icons.star,
-                  color: const Color(0xFFFFD700),
-                  isHighlighted: achievedBest,
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: _buildRecordItem(
-                  value: bestDailyScore > todayScore ? bestDailyScore - todayScore : 0,
-                  label: 'BEAT RECORD',
-                  icon: Icons.trending_up,
-                  color: const Color(0xFF007AFF),
-                  isHighlighted: false,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (achievedBest)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFFFFD700).withValues(alpha: 0.1),
-                    const Color(0xFFFF9F0A).withValues(alpha: 0.05),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFFFFD700).withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  TweenAnimationBuilder<double>(
-                    duration: const Duration(seconds: 2),
-                    tween: Tween(begin: 0.8, end: 1.2),
-                    curve: Curves.elasticOut,
-                    builder: (context, scale, child) => Transform.scale(
-                      scale: scale,
-                      child: Icon(
-                        Icons.celebration,
-                        color: const Color(0xFFFFD700),
-                        size: 24,
-                      ),
-                    ),
-                    onEnd: () => setState(() {}),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Congratulations!',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFFFD700),
-                          ),
-                        ),
-                        Text(
-                          'You achieved your personal best today!',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecordItem({
-    required int value,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool isHighlighted,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isHighlighted 
-          ? color.withValues(alpha: 0.15)
-          : color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isHighlighted 
-            ? color.withValues(alpha: 0.4)
-            : color.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                color: color,
-                size: 16,
-              ),
-              const SizedBox(width: 6),
-              TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 1000),
-                tween: Tween(begin: 0, end: value.toDouble()),
-                builder: (context, animatedValue, child) => Text(
-                  '${animatedValue.toInt()}',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: color.withValues(alpha: 0.8),
-              letterSpacing: 0.5,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  int _getBestDailyScore() {
-    int bestScore = 0;
-    
-    // Get all week keys from any habit's data
-    Set<String> allWeekKeys = {};
-    for (var habitWeeks in _trackingData.values) {
-      allWeekKeys.addAll(habitWeeks.keys);
-    }
-    
-    // Check each week and each day
-    for (String weekKey in allWeekKeys) {
-      for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
-        int dayScore = 0;
-        
-        // Calculate total score for this specific day
-        for (var category in _categories.entries) {
-          for (String habit in category.value) {
-            if (!_isHabitDisabled(habit, dayIndex)) {
-              HabitState? state = _trackingData[habit]?[weekKey]?[dayIndex];
-              if (state != null) {
-                int points = _getHabitPoints(habit, state, dayIndex);
-                dayScore += points;
-              }
-            }
-          }
-        }
-        
-        if (dayScore > bestScore) {
-          bestScore = dayScore;
-        }
-      }
-    }
-    
-    return bestScore;
-  }
-
 
   Widget _buildQuickStatsCard(int dayIndex) {
     int totalCompleted = 0;
@@ -4395,6 +4144,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
+          const ContestsDashboardWidget(),
+          const SizedBox(height: 24),
           _buildCompoundHabitsProgressCard(dayIndex),
           const SizedBox(height: 24),
           _buildCategoryProgressSection(dayIndex),
@@ -4547,10 +4298,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         int totalCount = 0;
         
         for (String habitId in compoundHabitIds) {
-          final habitTitle = _getHabitTitle(habitId);
-          if (!_isHabitDisabled(habitTitle, dayIndex)) {
+          if (!_isHabitDisabledById(habitId, dayIndex)) {
             totalCount++;
-            HabitState state = _trackingData[habitTitle]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
             if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
               completedCount++;
             }

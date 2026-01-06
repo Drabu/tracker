@@ -405,3 +405,133 @@ class TimelineConfig {
     );
   }
 }
+
+class ContestParticipant {
+  final String userId;
+  final String userName;
+  final String? userPhoto;
+  final int totalScore;
+
+  ContestParticipant({
+    required this.userId,
+    required this.userName,
+    this.userPhoto,
+    this.totalScore = 0,
+  });
+
+  factory ContestParticipant.fromJson(Map<String, dynamic> json) {
+    return ContestParticipant(
+      userId: json['userId'] ?? '',
+      userName: json['userName'] ?? '',
+      userPhoto: json['userPhoto'],
+      totalScore: json['totalScore'] ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'userId': userId,
+      'userName': userName,
+      'userPhoto': userPhoto,
+      'totalScore': totalScore,
+    };
+  }
+}
+
+class Contest {
+  final String id;
+  final String name;
+  final String description;
+  final String creatorId;
+  final String startDate;
+  final String endDate;
+  final String createdAt;
+  final String updatedAt;
+  final List<ContestParticipant> participants;
+  final bool isActive;
+  final ContestParticipant? winner;
+
+  Contest({
+    required this.id,
+    required this.name,
+    this.description = '',
+    required this.creatorId,
+    required this.startDate,
+    required this.endDate,
+    this.createdAt = '',
+    this.updatedAt = '',
+    this.participants = const [],
+    this.isActive = true,
+    this.winner,
+  });
+
+  factory Contest.fromJson(Map<String, dynamic> json) {
+    return Contest(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      creatorId: json['creatorId'] ?? '',
+      startDate: json['startDate'] ?? '',
+      endDate: json['endDate'] ?? '',
+      createdAt: json['createdAt'] ?? '',
+      updatedAt: json['updatedAt'] ?? '',
+      participants: (json['participants'] as List<dynamic>?)
+              ?.map((e) => ContestParticipant.fromJson(e))
+              .toList() ??
+          [],
+      isActive: json['isActive'] ?? true,
+      winner: json['winner'] != null
+          ? ContestParticipant.fromJson(json['winner'])
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'creatorId': creatorId,
+      'startDate': startDate,
+      'endDate': endDate,
+      'participants': participants.map((p) => p.toJson()).toList(),
+      'isActive': isActive,
+      'winner': winner?.toJson(),
+    };
+  }
+
+  bool get isEnded {
+    final now = DateTime.now();
+    final end = DateTime.tryParse(endDate);
+    return end != null && now.isAfter(end);
+  }
+
+  bool get hasStarted {
+    final now = DateTime.now();
+    final start = DateTime.tryParse(startDate);
+    return start != null && now.isAfter(start);
+  }
+}
+
+class UserBasic {
+  final String id;
+  final String name;
+  final String email;
+  final String? photoUrl;
+
+  UserBasic({
+    required this.id,
+    required this.name,
+    required this.email,
+    this.photoUrl,
+  });
+
+  factory UserBasic.fromJson(Map<String, dynamic> json) {
+    return UserBasic(
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      email: json['email'] ?? '',
+      photoUrl: json['photoUrl'],
+    );
+  }
+}

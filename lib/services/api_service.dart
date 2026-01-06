@@ -205,4 +205,63 @@ class ApiService {
       throw Exception('Failed to set compound habit');
     }
   }
+
+  static Future<List<Contest>> getContests() async {
+    final response = await http.get(Uri.parse('$_baseUrl/contests'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => Contest.fromJson(e)).toList();
+    }
+    throw Exception('Failed to load contests');
+  }
+
+  static Future<Contest> getContest(String id) async {
+    final response = await http.get(Uri.parse('$_baseUrl/contests/$id'));
+    if (response.statusCode == 200) {
+      return Contest.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to load contest');
+  }
+
+  static Future<Contest> createContest({
+    required String name,
+    required String description,
+    required String creatorId,
+    required String startDate,
+    required String endDate,
+    required List<String> userIds,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/contests'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'description': description,
+        'creatorId': creatorId,
+        'startDate': startDate,
+        'endDate': endDate,
+        'userIds': userIds,
+      }),
+    );
+    if (response.statusCode == 201) {
+      return Contest.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create contest');
+  }
+
+  static Future<void> deleteContest(String id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/contests/$id'));
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete contest');
+    }
+  }
+
+  static Future<List<UserBasic>> getAllUsers() async {
+    final response = await http.get(Uri.parse('$_baseUrl/users-list'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => UserBasic.fromJson(e)).toList();
+    }
+    throw Exception('Failed to load users');
+  }
 }

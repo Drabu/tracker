@@ -69,11 +69,10 @@ class _ExpandableSidebarState extends State<ExpandableSidebar>
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
     return Positioned(
       right: 0,
       top: 0,
-      bottom: bottomPadding,
+      bottom: 0,
       child: MouseRegion(
         onEnter: (_) => _expand(),
         onExit: (_) => _collapse(),

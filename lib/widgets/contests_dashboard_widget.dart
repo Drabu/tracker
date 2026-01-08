@@ -186,14 +186,22 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
     );
   }
 
+  String _getFirstName(String fullName) {
+    return fullName.split(' ').first;
+  }
+
   Widget _buildContestItem(Contest contest) {
     final isEnded = contest.isEnded;
     final hasStarted = contest.hasStarted;
 
     final sortedParticipants = List<ContestParticipant>.from(contest.participants)
       ..sort((a, b) => b.totalScore.compareTo(a.totalScore));
-    final topTwo = sortedParticipants.take(2).toList();
-    final maxScore = topTwo.isNotEmpty ? topTwo.first.totalScore : 1;
+    
+    // Show top 3 for ended contests, top 2 for active
+    final topParticipants = isEnded 
+        ? sortedParticipants.take(3).toList()
+        : sortedParticipants.take(2).toList();
+    final maxScore = topParticipants.isNotEmpty ? topParticipants.first.totalScore : 1;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -217,7 +225,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
             ],
           ),
           const SizedBox(height: 12),
-          if (topTwo.isEmpty)
+          if (topParticipants.isEmpty)
             Text(
               'No participants yet',
               style: TextStyle(
@@ -225,8 +233,10 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                 fontSize: 12,
               ),
             )
+          else if (isEnded)
+            _buildEndedContestPodium(topParticipants)
           else
-            ...topTwo.asMap().entries.map((entry) => 
+            ...topParticipants.asMap().entries.map((entry) => 
               _buildParticipantProgressBar(
                 entry.value, 
                 entry.key, 
@@ -236,6 +246,82 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEndedContestPodium(List<ContestParticipant> topThree) {
+    const rankLabels = ['🥇', '🥈', '🥉'];
+    const rankColors = [Color(0xFFFFD700), Color(0xFFC0C0C0), Color(0xFFCD7F32)];
+    
+    return Column(
+      children: topThree.asMap().entries.map((entry) {
+        final rank = entry.key;
+        final participant = entry.value;
+        final color = rankColors[rank];
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: rank == 0 
+                ? color.withValues(alpha: 0.15)
+                : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(10),
+            border: rank == 0 
+                ? Border.all(color: color.withValues(alpha: 0.3), width: 1)
+                : null,
+          ),
+          child: Row(
+            children: [
+              Text(
+                rankLabels[rank],
+                style: const TextStyle(fontSize: 18),
+              ),
+              const SizedBox(width: 10),
+              // User avatar
+              if (participant.userPhoto != null && participant.userPhoto!.isNotEmpty)
+                CircleAvatar(
+                  radius: 14,
+                  backgroundImage: NetworkImage(participant.userPhoto!),
+                )
+              else
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: color.withValues(alpha: 0.3),
+                  child: Text(
+                    _getFirstName(participant.userName).isNotEmpty 
+                        ? _getFirstName(participant.userName)[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _getFirstName(participant.userName),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: rank == 0 ? FontWeight.w600 : FontWeight.w500,
+                    color: rank == 0 ? color : Colors.white,
+                  ),
+                ),
+              ),
+              Text(
+                '${participant.totalScore} pts',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: rank == 0 ? color : Colors.white.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -260,6 +346,28 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
             children: [
               Row(
                 children: [
+                  // User avatar
+                  if (participant.userPhoto != null && participant.userPhoto!.isNotEmpty)
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundImage: NetworkImage(participant.userPhoto!),
+                    )
+                  else
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: color.withValues(alpha: 0.3),
+                      child: Text(
+                        _getFirstName(participant.userName).isNotEmpty 
+                            ? _getFirstName(participant.userName)[0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
                   if (rank == 0)
                     Icon(
                       isEnded ? Icons.emoji_events : Icons.arrow_upward,
@@ -268,7 +376,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                     ),
                   if (rank == 0) const SizedBox(width: 4),
                   Text(
-                    participant.userName,
+                    _getFirstName(participant.userName),
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,

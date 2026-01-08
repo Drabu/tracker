@@ -195,58 +195,8 @@ class ContestCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-            if (isEnded && contest.winner != null) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF238636).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: const Color(0xFF238636).withOpacity(0.5),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.emoji_events,
-                      color: Color(0xFFFFD700),
-                      size: 24,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Winner',
-                            style: TextStyle(
-                              color: Color(0xFF3FB950),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          Text(
-                            contest.winner!.userName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(
-                      '${contest.winner!.totalScore} pts',
-                      style: const TextStyle(
-                        color: Color(0xFFFFD700),
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            if (isEnded && sortedParticipants.isNotEmpty) ...[
+              _buildPodiumSection(sortedParticipants.take(3).toList()),
               const SizedBox(height: 12),
             ],
             Text(
@@ -305,6 +255,134 @@ class ContestCard extends StatelessWidget {
     );
   }
 
+  String _getFirstName(String fullName) {
+    return fullName.split(' ').first;
+  }
+
+  Widget _buildPodiumSection(List<ContestParticipant> topThree) {
+    const rankLabels = ['🥇 Winner', '🥈 2nd Place', '🥉 3rd Place'];
+    const rankColors = [Color(0xFFFFD700), Color(0xFFC0C0C0), Color(0xFFCD7F32)];
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF238636).withOpacity(0.15),
+            const Color(0xFF161B22),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF238636).withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.emoji_events,
+                color: Color(0xFFFFD700),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Final Results',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...topThree.asMap().entries.map((entry) {
+            final rank = entry.key;
+            final participant = entry.value;
+            final color = rankColors[rank];
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: rank == 0 
+                    ? color.withOpacity(0.15)
+                    : Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: rank == 0 
+                    ? Border.all(color: color.withOpacity(0.4), width: 1.5)
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  // User avatar
+                  if (participant.userPhoto != null && participant.userPhoto!.isNotEmpty)
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundImage: NetworkImage(participant.userPhoto!),
+                    )
+                  else
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: color.withOpacity(0.3),
+                      child: Text(
+                        _getFirstName(participant.userName).isNotEmpty 
+                            ? _getFirstName(participant.userName)[0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rankLabels[rank],
+                          style: TextStyle(
+                            color: color,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _getFirstName(participant.userName),
+                          style: TextStyle(
+                            color: rank == 0 ? Colors.white : Colors.white.withOpacity(0.9),
+                            fontSize: 16,
+                            fontWeight: rank == 0 ? FontWeight.bold : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    '${participant.totalScore} pts',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _buildParticipantRow(int rank, ContestParticipant participant, bool isEnded) {
     Color? rankColor;
     if (isEnded) {
@@ -355,7 +433,7 @@ class ContestCard extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              participant.userName,
+              _getFirstName(participant.userName),
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,

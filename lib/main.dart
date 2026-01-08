@@ -14,6 +14,7 @@ import 'screens/timeline_screen.dart';
 import 'screens/habit_list_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/contest_screen.dart';
+import 'screens/social_settings_screen.dart';
 import 'models/models.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
@@ -634,6 +635,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     label: 'Test Sound',
                     color: Colors.blue,
                     onTap: _playAirplaneCallSound,
+                  ),
+                  SidebarItem(
+                    icon: Icons.speaker,
+                    label: 'Integrations',
+                    color: Colors.purple,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        PageRouteBuilder(
+                          pageBuilder: (context, animation, secondaryAnimation) =>
+                              const SocialSettingsScreen(),
+                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                            return FadeTransition(opacity: animation, child: child);
+                          },
+                        ),
+                      );
+                    },
                   ),
                   SidebarItem(
                     icon: Icons.logout,
@@ -1973,6 +1991,122 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return '$weekday, ${months[_timelineSelectedDate.month - 1]} ${_timelineSelectedDate.day}';
   }
 
+  String _formatFullDate() {
+    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final weekday = weekdays[_timelineSelectedDate.weekday - 1];
+    final day = _timelineSelectedDate.day;
+    final month = months[_timelineSelectedDate.month - 1];
+    
+    // Add ordinal suffix (1st, 2nd, 3rd, etc.)
+    String suffix;
+    if (day >= 11 && day <= 13) {
+      suffix = 'th';
+    } else {
+      switch (day % 10) {
+        case 1:
+          suffix = 'st';
+          break;
+        case 2:
+          suffix = 'nd';
+          break;
+        case 3:
+          suffix = 'rd';
+          break;
+        default:
+          suffix = 'th';
+      }
+    }
+    
+    return '$weekday $day$suffix of $month';
+  }
+
+  Widget _buildSelectedDateWidget() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.95),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isSelectedDateToday() 
+            ? const Color(0xFF58A6FF).withValues(alpha: 0.3)
+            : Colors.white.withValues(alpha: 0.1),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _isSelectedDateToday()
+                ? const Color(0xFF58A6FF).withValues(alpha: 0.15)
+                : const Color(0xFFFF9F0A).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.calendar_today_rounded,
+              color: _isSelectedDateToday() 
+                ? const Color(0xFF58A6FF)
+                : const Color(0xFFFF9F0A),
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_isSelectedDateToday())
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    margin: const EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF30D158).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'TODAY',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF30D158),
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                Text(
+                  _formatFullDate(),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.95),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadTodaysTimeline() async {
     setState(() {
       _isLoadingTimeline = true;
@@ -2406,6 +2540,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 context,
                 MaterialPageRoute(builder: (context) => const TimelineConfigScreen()),
               );
+            } else if (value == 'social') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SocialSettingsScreen()),
+              );
             }
           },
           itemBuilder: (context) => [
@@ -2447,6 +2586,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   Icon(Icons.tune, size: 20),
                   SizedBox(width: 12),
                   Text('Configure Timelines'),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'social',
+              child: Row(
+                children: [
+                  Icon(Icons.share, size: 20),
+                  SizedBox(width: 12),
+                  Text('Social & Integrations'),
                 ],
               ),
             ),
@@ -3471,14 +3620,30 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'TODAY\'S FOCUS',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.9),
-              letterSpacing: 0.5,
-            ),
+          Row(
+            children: [
+              Text(
+                'TODAY\'S FOCUS',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.9),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _formatFullDate(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF58A6FF),
+                  ),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           _buildQuickStatsCard(dayIndex),
@@ -4146,6 +4311,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
           const SizedBox(height: 16),
           const ContestsDashboardWidget(),
+          const SizedBox(height: 24),
+          _buildDailyPointsCard(dayIndex),
           const SizedBox(height: 24),
           _buildCompoundHabitsProgressCard(dayIndex),
           const SizedBox(height: 24),

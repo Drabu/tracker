@@ -264,4 +264,23 @@ class ApiService {
     }
     throw Exception('Failed to load users');
   }
+
+  static Future<Map<String, dynamic>> getAlexaSettings(String userId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/users/$userId/alexa-settings'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load Alexa settings');
+  }
+
+  static Future<void> setAlexaSettings(String userId, String alexaAccessCode) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/users/$userId/alexa-settings'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'alexaAccessCode': alexaAccessCode}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to save Alexa settings');
+    }
+  }
 }

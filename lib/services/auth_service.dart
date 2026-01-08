@@ -27,6 +27,13 @@ class AuthService {
   static String? get authToken => _authToken;
   static bool get isLoggedIn => _currentUser != null;
 
+  static Future<AppUser?> getCurrentUser() async {
+    if (_currentUser == null) {
+      await init();
+    }
+    return _currentUser;
+  }
+
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString(_userKey);

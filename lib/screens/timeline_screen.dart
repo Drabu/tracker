@@ -227,7 +227,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
   }
 
   void _showAddEntryDialog(Habit habit, int startMinutes) {
-    int points = math.min(10, _remainingPoints);
+    int points = 0;
     int startHour = startMinutes ~/ 60;
     int startMinute = startMinutes % 60;
     int endHour = (startMinutes + 30) ~/ 60;
@@ -301,9 +301,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                       Expanded(
                         child: Slider(
                           value: points.toDouble(),
-                          min: 1,
+                          min: 0,
                           max: _remainingPoints.toDouble().clamp(1, 50),
-                          divisions: math.max(1, _remainingPoints.clamp(1, 50) - 1),
+                          divisions: _remainingPoints.clamp(1, 50),
                           label: '$points pts',
                           onChanged: (v) => setDialogState(() => points = v.round()),
                         ),
@@ -437,9 +437,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                       Expanded(
                         child: Slider(
                           value: points.toDouble(),
-                          min: 1,
+                          min: 0,
                           max: maxAddablePoints.toDouble().clamp(1, 50),
-                          divisions: math.max(1, maxAddablePoints.clamp(1, 50) - 1),
+                          divisions: maxAddablePoints.clamp(1, 50),
                           label: '$points pts',
                           onChanged: (v) => setDialogState(() => points = v.round()),
                         ),
@@ -528,7 +528,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
 
   void _addEntryWithTimeRange(Habit habit, int startMinutes, int endMinutes) {
     final duration = endMinutes - startMinutes;
-    int points = math.min(10, _remainingPoints);
+    int points = 0;
     
     showDialog(
       context: context,
@@ -575,9 +575,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                     Expanded(
                       child: Slider(
                         value: points.toDouble(),
-                        min: 1,
+                        min: 0,
                         max: _remainingPoints.toDouble().clamp(1, 50),
-                        divisions: math.max(1, _remainingPoints.clamp(1, 50) - 1),
+                        divisions: _remainingPoints.clamp(1, 50),
                         label: '$points pts',
                         onChanged: (v) => setDialogState(() => points = v.round()),
                       ),

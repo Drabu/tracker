@@ -610,7 +610,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                             return FadeTransition(opacity: animation, child: child);
                           },
                         ),
-                      );
+                      ).then((_) => _loadTodaysTimeline());
                     },
                   ),
                   SidebarItem(
@@ -1489,6 +1489,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _playCompletionSound(HabitState state) async {
+    // Temporarily disabled - no sounds for completed, partial, or missed
+    return;
+    
     try {
       // Ensure audio context is resumed
       if (_audioContext == null) {
@@ -2308,7 +2311,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   return FadeTransition(opacity: animation, child: child);
                 },
               ),
-            );
+            ).then((_) => _loadTodaysTimeline());
           },
           tooltip: 'Daily Timeline',
           backgroundColor: Colors.green,
@@ -3042,6 +3045,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 24),
           _buildDailyPointsCard(dayIndex),
           const SizedBox(height: 24),
+          _buildCategoryProgressSection(dayIndex),
         ],
       ),
     );
@@ -4312,11 +4316,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 16),
           const ContestsDashboardWidget(),
           const SizedBox(height: 24),
-          _buildDailyPointsCard(dayIndex),
-          const SizedBox(height: 24),
           _buildCompoundHabitsProgressCard(dayIndex),
-          const SizedBox(height: 24),
-          _buildCategoryProgressSection(dayIndex),
         ],
       ),
     );

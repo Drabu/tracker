@@ -554,7 +554,7 @@ class _CreateContestDialogState extends State<CreateContestDialog> {
         description: _descriptionController.text.trim(),
         creatorId: AuthService.currentUser?.id ?? '',
         startDate: _startDate.toIso8601String().split('T')[0],
-        endDate: _endDate.toIso8601String().split('T')[0],
+        endDate: DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toIso8601String(),
         userIds: _selectedUserIds.toList(),
       );
       if (mounted) {

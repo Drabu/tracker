@@ -1536,10 +1536,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _animateProgressUpdate() {
-    _progressAnimationController.reset();
-    _ringAnimationController.reset();
-    _progressAnimationController.forward();
-    _ringAnimationController.forward();
+    // No longer resetting animations - using AnimatedContainer instead
   }
 
   void _updateHabitState(String habit, int dayIndex, HabitState state, TimeOfDay? selectedTime) {
@@ -1713,13 +1710,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
     
     if (updateCategory) {
-      _categoryProgressAnimationController.reset();
-      _categoryProgressAnimationController.forward();
+      // No longer resetting animation - using AnimatedContainer instead
     }
     
-    // Always update the main progress (points display)
-    _progressAnimationController.reset();
-    _progressAnimationController.forward();
+    // No longer resetting animation - using AnimatedContainer instead
   }
 
   Future<void> _enableWakeLock() async {
@@ -3045,6 +3039,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 24),
           _buildDailyPointsCard(dayIndex),
           const SizedBox(height: 24),
+          _buildCompoundHabitsProgressCard(dayIndex),
+          const SizedBox(height: 24),
           _buildCategoryProgressSection(dayIndex),
         ],
       ),
@@ -3176,8 +3172,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 children: [
                   // Animated points with sparkle effect
                   TweenAnimationBuilder<double>(
-                    duration: const Duration(milliseconds: 800),
-                    tween: Tween(begin: 0, end: _getDailyScore(dayIndex).toDouble()),
+                    duration: const Duration(milliseconds: 600),
+                    curve: Curves.easeOutCubic,
+                    tween: Tween(begin: _getDailyScore(dayIndex).toDouble(), end: _getDailyScore(dayIndex).toDouble()),
                     builder: (context, animatedScore, child) => Row(
                       children: [
                         Text(
@@ -3376,8 +3373,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     Row(
                       children: [
                         TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 1000),
-                          tween: Tween(begin: 0, end: completionRate * 100),
+                          duration: const Duration(milliseconds: 600),
+                          curve: Curves.easeOutCubic,
+                          tween: Tween(begin: completionRate * 100, end: completionRate * 100),
                           builder: (context, animatedRate, child) => Text(
                             '${animatedRate.toInt()}%',
                             style: const TextStyle(
@@ -3430,8 +3428,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: TweenAnimationBuilder<double>(
-                        duration: const Duration(milliseconds: 1200),
-                        tween: Tween(begin: 0, end: completionRate),
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeOutCubic,
+                        tween: Tween(begin: completionRate, end: completionRate),
                         builder: (context, animatedProgress, child) => LinearProgressIndicator(
                           value: animatedProgress,
                           backgroundColor: Colors.transparent,
@@ -3590,8 +3589,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
               const SizedBox(width: 4),
               TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 800),
-                tween: Tween(begin: 0, end: value.toDouble()),
+                duration: const Duration(milliseconds: 600),
+                curve: Curves.easeOutCubic,
+                tween: Tween(begin: value.toDouble(), end: value.toDouble()),
                 builder: (context, animatedValue, child) => Text(
                   '${animatedValue.toInt()}',
                   style: TextStyle(
@@ -4304,19 +4304,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'YOUR PROGRESS',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.9),
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 16),
           const ContestsDashboardWidget(),
-          const SizedBox(height: 24),
-          _buildCompoundHabitsProgressCard(dayIndex),
         ],
       ),
     );
@@ -5170,15 +5158,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               borderRadius: BorderRadius.circular(3),
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            child: AnimatedBuilder(
-              animation: _categoryProgressAnimation,
-              builder: (context, child) => FractionallySizedBox(
-                widthFactor: progress * _categoryProgressAnimation.value,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(3),
-                    color: categoryColor,
-                  ),
+            child: LayoutBuilder(
+              builder: (context, constraints) => AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+                width: constraints.maxWidth * progress,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(3),
+                  color: categoryColor,
                 ),
               ),
             ),
@@ -6465,16 +6452,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               borderRadius: BorderRadius.circular(4),
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            child: AnimatedBuilder(
-              animation: _progressAnimation,
-              builder: (context, child) => FractionallySizedBox(
-                widthFactor: percentage * _progressAnimation.value,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF30D158), Color(0xFF32D74B)],
-                    ),
+            child: LayoutBuilder(
+              builder: (context, constraints) => AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+                width: constraints.maxWidth * percentage,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF30D158), Color(0xFF32D74B)],
                   ),
                 ),
               ),
@@ -6781,16 +6767,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               borderRadius: BorderRadius.circular(4),
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            child: AnimatedBuilder(
-              animation: _progressAnimation,
-              builder: (context, child) => FractionallySizedBox(
-                widthFactor: overallProgress * _progressAnimation.value,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(4),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFF9F0A), Color(0xFFFF453A)],
-                    ),
+            child: LayoutBuilder(
+              builder: (context, constraints) => AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutCubic,
+                width: constraints.maxWidth * overallProgress,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF9F0A), Color(0xFFFF453A)],
                   ),
                 ),
               ),
@@ -6846,15 +6831,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         borderRadius: BorderRadius.circular(3),
                         color: Colors.white.withValues(alpha: 0.1),
                       ),
-                      child: AnimatedBuilder(
-                        animation: _progressAnimation,
-                        builder: (context, child) => FractionallySizedBox(
-                          widthFactor: progress * _progressAnimation.value,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(3),
-                              color: color,
-                            ),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => AnimatedContainer(
+                          duration: const Duration(milliseconds: 400),
+                          curve: Curves.easeOutCubic,
+                          width: constraints.maxWidth * progress,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(3),
+                            color: color,
                           ),
                         ),
                       ),

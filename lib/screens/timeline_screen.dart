@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../widgets/clock_time_picker.dart';
 import '../widgets/calendar_timeline.dart';
+import '../widgets/event_side_panel.dart';
 import 'habit_list_screen.dart';
 import 'daily_insights_screen.dart';
 
@@ -25,6 +25,10 @@ class _TimelineScreenState extends State<TimelineScreen> {
   static const int maxPoints = 100;
   static const int minDurationMinutes = 10;
   static const int maxDurationMinutes = 12 * 60; // 12 hours
+  
+  // Side panel state
+  Event? _editingEntry;
+  int? _editingIndex;
 
   @override
   void initState() {
@@ -366,188 +370,68 @@ class _TimelineScreenState extends State<TimelineScreen> {
     }
   }
 
-  void _showEditEntryDialog(Event entry, int index) {
-    int points = entry.points;
-    int startHour = entry.startHour;
-    int startMinute = entry.startMinute;
-    int endHour = entry.endMinutes ~/ 60;
-    int endMinute = entry.endMinutes % 60;
-    final maxAddablePoints = _remainingPoints + entry.points;
-    Habit? selectedHabit = _habitsMap[entry.habitId];
+  void _openEditPanel(Event entry, int index) {
+    setState(() {
+      _editingEntry = entry;
+      _editingIndex = index;
+    });
+  }
 
-    showDialog(
+  void _closeEditPanel() {
+    // If closing a new event (no habit selected), remove it from the list
+    if (_editingEntry != null && _editingIndex != null) {
+      final entry = _editingEntry!;
+      if (entry.habitId.isEmpty || entry.habitId == 'null') {
+        setState(() {
+          _entries.removeAt(_editingIndex!);
+          _editingEntry = null;
+          _editingIndex = null;
+        });
+        return;
+      }
+    }
+    setState(() {
+      _editingEntry = null;
+      _editingIndex = null;
+    });
+  }
+
+  void _onSaveEntry(Event updatedEntry) {
+    if (_editingIndex == null) return;
+    setState(() {
+      _entries[_editingIndex!] = updatedEntry;
+      _entries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    });
+    _autoSave();
+  }
+
+  void _onDeleteEntry() {
+    if (_editingIndex == null) return;
+    setState(() {
+      _entries.removeAt(_editingIndex!);
+    });
+    _autoSave();
+  }
+
+  void _selectHabitForEditingEntry(Habit? currentHabit) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          final duration = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
-          final isValidDuration = duration >= minDurationMinutes && duration <= maxDurationMinutes;
-          
-          return AlertDialog(
-            title: Text('Edit ${selectedHabit?.title ?? 'Entry'}'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Habit selector
-                  InkWell(
-                    onTap: () {
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        builder: (ctx) => DraggableScrollableSheet(
-                          initialChildSize: 0.7,
-                          minChildSize: 0.5,
-                          maxChildSize: 0.95,
-                          expand: false,
-                          builder: (ctx, scrollController) => HabitListScreen(
-                            onHabitSelected: (habit) {
-                              Navigator.pop(ctx);
-                              setDialogState(() {
-                                selectedHabit = habit;
-                              });
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade800,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade600),
-                      ),
-                      child: Row(
-                        children: [
-                          if (selectedHabit?.icon.isNotEmpty == true)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 12),
-                              child: Text(selectedHabit!.icon, style: const TextStyle(fontSize: 24)),
-                            ),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Habit',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                                ),
-                                Text(
-                                  selectedHabit?.title ?? 'Select habit',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: Colors.grey),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  DualClockTimePicker(
-                    startHour: startHour,
-                    startMinute: startMinute,
-                    endHour: endHour,
-                    endMinute: endMinute,
-                    onStartTimeChanged: (time) {
-                      setDialogState(() {
-                        startHour = time.hour;
-                        startMinute = (time.minute ~/ 5) * 5;
-                      });
-                    },
-                    onEndTimeChanged: (time) {
-                      setDialogState(() {
-                        endHour = time.hour;
-                        endMinute = (time.minute ~/ 5) * 5;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isValidDuration ? Colors.grey.shade800 : Colors.red.shade900,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.timer_outlined,
-                          size: 18,
-                          color: isValidDuration ? Colors.grey.shade400 : Colors.red.shade200,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          duration > 0 ? _formatDuration(duration) : 'Invalid time range',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: isValidDuration ? Colors.white : Colors.red.shade200,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      const Text('Points: '),
-                      Expanded(
-                        child: Slider(
-                          value: points.toDouble(),
-                          min: 0,
-                          max: maxAddablePoints.toDouble().clamp(1, 50),
-                          divisions: maxAddablePoints.clamp(1, 50),
-                          label: '$points pts',
-                          onChanged: (v) => setDialogState(() => points = v.round()),
-                        ),
-                      ),
-                      Text('$points pts'),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  setState(() => _entries.removeAt(index));
-                  _autoSave();
-                  Navigator.pop(context);
-                },
-                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                child: const Text('Remove'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: isValidDuration && selectedHabit != null
-                    ? () {
-                        setState(() {
-                          _entries[index] = entry.copyWith(
-                            habit: selectedHabit,
-                            startMinutes: startHour * 60 + startMinute,
-                            durationMinutes: duration,
-                            points: points,
-                          );
-                          _entries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
-                        });
-                        _autoSave();
-                        Navigator.pop(context);
-                      }
-                    : null,
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollController) => HabitListScreen(
+          onHabitSelected: (habit) {
+            Navigator.pop(ctx);
+            if (_editingEntry != null && _editingIndex != null) {
+              setState(() {
+                _editingEntry = _editingEntry!.copyWith(habit: habit);
+              });
+            }
+          },
+        ),
       ),
     );
   }
@@ -572,22 +456,26 @@ class _TimelineScreenState extends State<TimelineScreen> {
   }
 
   void _showHabitPickerForTimeRange(int startMinutes, int endMinutes) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => HabitListScreen(
-          onHabitSelected: (habit) {
-            Navigator.pop(context);
-            _addEntryWithTimeRange(habit, startMinutes, endMinutes);
-          },
-        ),
-      ),
+    // Create a new event with a placeholder habit and open the side panel
+    final duration = endMinutes - startMinutes;
+    final placeholderHabit = Habit(
+      id: '',
+      title: 'Select Habit',
+      category: '',
     );
+    final newEvent = Event(
+      id: '${DateTime.now().millisecondsSinceEpoch}_new_$startMinutes',
+      habit: placeholderHabit,
+      startMinutes: startMinutes,
+      durationMinutes: duration,
+      points: 0,
+    );
+    
+    setState(() {
+      _entries.add(newEvent);
+      _editingEntry = newEvent;
+      _editingIndex = _entries.length - 1;
+    });
   }
 
   void _addEntryWithTimeRange(Habit habit, int startMinutes, int endMinutes) {
@@ -700,9 +588,83 @@ class _TimelineScreenState extends State<TimelineScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Timeline'),
-        actions: [
+      body: Row(
+        children: [
+          // Main content area (timeline + app bar)
+          Expanded(
+            child: Column(
+              children: [
+                // Custom app bar that resizes with content
+                _buildAppBar(),
+                // Main content
+                Expanded(
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          children: [
+                            _buildPointsIndicator(),
+                            Expanded(child: _buildTimeline()),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+          // Side panel - slides in from right, pushes content
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
+            width: _editingEntry != null ? 380 : 0,
+            child: _editingEntry != null && _editingIndex != null
+                ? EventSidePanel(
+                    key: ValueKey(_editingEntry!.id),
+                    entry: _editingEntry!,
+                    entryIndex: _editingIndex!,
+                    habitsMap: _habitsMap,
+                    remainingPoints: _remainingPoints,
+                    minDurationMinutes: minDurationMinutes,
+                    maxDurationMinutes: maxDurationMinutes,
+                    onClose: _closeEditPanel,
+                    onSave: _onSaveEntry,
+                    onDelete: _onDeleteEntry,
+                    onSelectHabit: _selectHabitForEditingEntry,
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
+      ),
+      floatingActionButton: _editingEntry == null 
+          ? FloatingActionButton(
+              onPressed: _showAddHabitSheet,
+              child: const Icon(Icons.add),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildAppBar() {
+    return Container(
+      height: 56 + MediaQuery.of(context).padding.top,
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(
+          bottom: BorderSide(
+            color: Colors.white.withValues(alpha: 0.1),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          Text(
+            'Timeline',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
           IconButton(
             icon: const Icon(Icons.pie_chart_rounded),
             tooltip: 'Daily Insights',
@@ -753,20 +715,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
                 : const Icon(Icons.save),
             onPressed: _isSaving ? null : _saveTimeline,
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddHabitSheet,
-        child: const Icon(Icons.add),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildPointsIndicator(),
-                Expanded(child: _buildTimeline()),
-              ],
-            ),
     );
   }
 
@@ -825,7 +776,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
         _showHabitPickerForTimeRange(startMinutes, endMinutes);
       },
       onEntryTap: (entry, index) {
-        _showEditEntryDialog(entry, index);
+        _openEditPanel(entry, index);
       },
       onEntryResize: (index, newStartMinutes, newEndMinutes) {
         setState(() {

@@ -249,32 +249,36 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
   Widget build(BuildContext context) {
     final totalHeight = 24 * hourHeight;
     
-    return GestureDetector(
-      onLongPressStart: (details) {
-        _handleDragStart(DragStartDetails(globalPosition: details.globalPosition));
-      },
-      onLongPressMoveUpdate: (details) {
-        _handleDragUpdate(DragUpdateDetails(globalPosition: details.globalPosition, delta: Offset.zero));
-      },
-      onLongPressEnd: (details) {
-        _handleDragEnd(DragEndDetails());
-      },
-      child: SingleChildScrollView(
-        controller: _scrollController,
-        padding: const EdgeInsets.only(bottom: 100),
-        child: SizedBox(
-          height: totalHeight,
-          child: Stack(
-            children: [
-              ..._buildHourLines(),
-              ..._buildEntries(),
-              _buildCurrentTimeIndicator(),
-              if (_isDragging && _dragStartMinutes != null && _dragEndMinutes != null)
-                _buildDragSelection(),
-            ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          onLongPressStart: (details) {
+            _handleDragStart(DragStartDetails(globalPosition: details.globalPosition));
+          },
+          onLongPressMoveUpdate: (details) {
+            _handleDragUpdate(DragUpdateDetails(globalPosition: details.globalPosition, delta: Offset.zero));
+          },
+          onLongPressEnd: (details) {
+            _handleDragEnd(DragEndDetails());
+          },
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            padding: const EdgeInsets.only(bottom: 100),
+            child: SizedBox(
+              height: totalHeight,
+              child: Stack(
+                children: [
+                  ..._buildHourLines(),
+                  ..._buildEntries(constraints.maxWidth),
+                  _buildCurrentTimeIndicator(),
+                  if (_isDragging && _dragStartMinutes != null && _dragEndMinutes != null)
+                    _buildDragSelection(constraints.maxWidth),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -430,7 +434,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     return a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes;
   }
 
-  List<Widget> _buildEntries() {
+  List<Widget> _buildEntries(double containerWidth) {
     final List<Widget> widgets = [];
     final layouts = _calculateEntryLayouts();
     
@@ -450,14 +454,16 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
       final displayStartMinutes = layout.startMinutes;
       final displayEndMinutes = layout.endMinutes;
       
-      final startY = (displayStartMinutes / 60) * hourHeight;
-      final height = ((displayEndMinutes - displayStartMinutes) / 60 * hourHeight).clamp(20.0, double.infinity);
+      // Add vertical spacing between events
+      const double verticalPadding = 2.0;
+      final startY = (displayStartMinutes / 60) * hourHeight + verticalPadding;
+      final height = ((displayEndMinutes - displayStartMinutes) / 60 * hourHeight - (verticalPadding * 2)).clamp(20.0, double.infinity);
       
       final color = _getPointsBasedColor(entry.points);
       final isHovered = _hoveredEntryIndex == index;
       
-      // Calculate horizontal position based on column
-      final availableWidth = MediaQuery.of(context).size.width - timeGutterWidth - 4 - 8;
+      // Calculate horizontal position based on column - use actual container width
+      final availableWidth = containerWidth - timeGutterWidth - 4 - 8;
       final columnWidth = availableWidth / layout.totalColumns;
       final leftOffset = timeGutterWidth + 4 + (layout.column * columnWidth);
       final entryWidth = columnWidth - 2; // 2px gap between columns
@@ -607,12 +613,12 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                     ),
                   ),
                   
-                  // Top resize handle - always visible for easier touch access
+                  // Top-right resize dot (centered on top edge, right side)
                   Positioned(
-                    left: 0,
-                    right: 0,
-                    top: -resizeHandleHeight / 2,
-                    height: resizeHandleHeight,
+                    right: 40,
+                    top: -12,
+                    width: 24,
+                    height: 24,
                     child: MouseRegion(
                       cursor: SystemMouseCursors.resizeRow,
                       onEnter: (_) => setState(() => _hoveringTop = true),
@@ -625,17 +631,21 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                         child: Center(
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
-                            width: _hoveringTop || (isBeingResized && _resizingTop) ? 72 : 56,
-                            height: _hoveringTop || (isBeingResized && _resizingTop) ? 8 : 5,
+                            width: _hoveringTop || (isBeingResized && _resizingTop) ? 12 : 10,
+                            height: _hoveringTop || (isBeingResized && _resizingTop) ? 12 : 10,
                             decoration: BoxDecoration(
                               color: _hoveringTop || (isBeingResized && _resizingTop)
                                   ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(4),
+                                  : Colors.white.withValues(alpha: 0.9),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: color.withValues(alpha: 0.8),
+                                width: 1.5,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 4,
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 3,
                                   offset: const Offset(0, 1),
                                 ),
                               ],
@@ -646,12 +656,12 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                     ),
                   ),
                   
-                  // Bottom resize handle - always visible for easier touch access
+                  // Bottom-left resize dot (centered on bottom edge, left side)
                   Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: -resizeHandleHeight / 2,
-                    height: resizeHandleHeight,
+                    left: 8,
+                    bottom: -12,
+                    width: 24,
+                    height: 24,
                     child: MouseRegion(
                       cursor: SystemMouseCursors.resizeRow,
                       onEnter: (_) => setState(() => _hoveringBottom = true),
@@ -664,17 +674,21 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                         child: Center(
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
-                            width: _hoveringBottom || (isBeingResized && !_resizingTop) ? 72 : 56,
-                            height: _hoveringBottom || (isBeingResized && !_resizingTop) ? 8 : 5,
+                            width: _hoveringBottom || (isBeingResized && !_resizingTop) ? 12 : 10,
+                            height: _hoveringBottom || (isBeingResized && !_resizingTop) ? 12 : 10,
                             decoration: BoxDecoration(
                               color: _hoveringBottom || (isBeingResized && !_resizingTop)
                                   ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.7),
-                              borderRadius: BorderRadius.circular(4),
+                                  : Colors.white.withValues(alpha: 0.9),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: color.withValues(alpha: 0.8),
+                                width: 1.5,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
-                                  blurRadius: 4,
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 3,
                                   offset: const Offset(0, 1),
                                 ),
                               ],
@@ -695,7 +709,7 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     return widgets;
   }
 
-  Widget _buildDragSelection() {
+  Widget _buildDragSelection(double containerWidth) {
     int startMin = _dragStartMinutes!;
     int endMin = _dragEndMinutes!;
     
@@ -707,11 +721,12 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     
     final startY = (startMin / 60) * hourHeight;
     final height = ((endMin - startMin) / 60 * hourHeight).clamp(15.0, double.infinity);
+    final entryWidth = containerWidth - timeGutterWidth - 4 - 8;
     
     return Positioned(
       left: timeGutterWidth + 4,
       top: startY,
-      right: 8,
+      width: entryWidth,
       height: height,
       child: Container(
         decoration: BoxDecoration(

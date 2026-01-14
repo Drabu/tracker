@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:async';
@@ -15,6 +16,7 @@ import 'screens/habit_list_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/contest_screen.dart';
 import 'screens/social_settings_screen.dart';
+import 'screens/glass_dashboard_screen.dart';
 import 'models/models.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
@@ -598,6 +600,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             if (_currentView == ViewType.day)
               ExpandableSidebar(
                 items: [
+                  if (kDebugMode)
+                    SidebarItem(
+                      icon: Icons.auto_awesome,
+                      label: 'Glass Dashboard',
+                      color: const Color(0xFF22D3EE),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            pageBuilder: (context, animation, secondaryAnimation) =>
+                                const GlassDashboardScreen(),
+                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                              return FadeTransition(opacity: animation, child: child);
+                            },
+                          ),
+                        );
+                      },
+                    ),
                   SidebarItem(
                     icon: Icons.calendar_today,
                     label: 'Select Date',
@@ -2550,9 +2570,27 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 context,
                 MaterialPageRoute(builder: (context) => const SocialSettingsScreen()),
               );
+            } else if (value == 'glass_dashboard') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const GlassDashboardScreen()),
+              );
             }
           },
           itemBuilder: (context) => [
+            if (kDebugMode) ...[
+              const PopupMenuItem(
+                value: 'glass_dashboard',
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome, size: 20, color: Color(0xFF22D3EE)),
+                    SizedBox(width: 12),
+                    Text('Glass Dashboard ✨', style: TextStyle(color: Color(0xFF22D3EE))),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+            ],
             const PopupMenuItem(
               value: 'timeline',
               child: Row(

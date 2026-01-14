@@ -356,4 +356,75 @@ class ApiService {
       throw Exception('Failed to disconnect Alexa Reminders');
     }
   }
+
+  // Get user contests (for glass dashboard)
+  static Future<List<Map<String, dynamic>>> getUserContests(String userId) async {
+    try {
+      final response = await http.get(Uri.parse('$_baseUrl/contests?userId=$userId'));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((e) => e as Map<String, dynamic>).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching user contests: $e');
+      return [];
+    }
+  }
+
+  // Get weekly stats for momentum chart
+  static Future<Map<String, dynamic>> getWeeklyStats(String userId) async {
+    try {
+      // Get timelines for last 7 days
+      final now = DateTime.now();
+      List<int> dailyPoints = [];
+      int totalPoints = 0;
+      int activeDays = 0;
+      int bestScore = 0;
+
+      for (int i = 6; i >= 0; i--) {
+        final date = now.subtract(Duration(days: i));
+        final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        
+        try {
+          final timeline = await getTimelineByDate(userId, dateStr);
+          if (timeline != null) {
+            int dayPoints = 0;
+            for (var entry in timeline.entries) {
+              final isCompleted = entry.completionStatus == CompletionStatus.completed ||
+                                  entry.completionStatus == CompletionStatus.onTime ||
+                                  entry.completionStatus == CompletionStatus.delayed ||
+                                  entry.completionStatus == CompletionStatus.partial;
+              if (isCompleted) {
+                dayPoints += entry.points;
+              }
+            }
+            dailyPoints.add(dayPoints.clamp(0, 100));
+            totalPoints += dayPoints;
+            if (dayPoints > 0) activeDays++;
+            if (dayPoints > bestScore) bestScore = dayPoints;
+          } else {
+            dailyPoints.add(0);
+          }
+        } catch (e) {
+          dailyPoints.add(0);
+        }
+      }
+
+      return {
+        'dailyPoints': dailyPoints,
+        'totalPoints': totalPoints,
+        'activeDays': activeDays,
+        'bestScore': bestScore,
+      };
+    } catch (e) {
+      print('Error fetching weekly stats: $e');
+      return {
+        'dailyPoints': [0, 0, 0, 0, 0, 0, 0],
+        'totalPoints': 0,
+        'activeDays': 0,
+        'bestScore': 0,
+      };
+    }
+  }
 }

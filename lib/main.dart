@@ -22,6 +22,7 @@ import 'services/deep_link_handler.dart';
 import 'widgets/expandable_sidebar.dart';
 import 'widgets/contests_dashboard_widget.dart' show ContestsDashboardWidget, contestRefreshNotifier;
 import 'widgets/category_pie_chart.dart';
+import 'widgets/weekly_momentum_widget.dart';
 import 'screens/daily_insights_screen.dart';
 
 enum HabitState {
@@ -2988,6 +2989,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       children: [
         _buildTodaysFocusSection(todayIndex),
         const SizedBox(height: 24),
+        const WeeklyMomentumWidget(),
+        const SizedBox(height: 24),
         _buildYourProgressSection(todayIndex, currentScore),
         const SizedBox(height: 24),
         const ContestsDashboardWidget(),
@@ -3042,11 +3045,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
+          const WeeklyMomentumWidget(),
+          const SizedBox(height: 24),
           _buildAppleFitnessStyleCard(dayIndex),
-          const SizedBox(height: 24),
-          _buildDailyPointsCard(dayIndex),
-          const SizedBox(height: 24),
-          _buildCompoundHabitsProgressCard(dayIndex),
           const SizedBox(height: 24),
           _buildCategoryProgressSection(dayIndex),
         ],
@@ -3276,26 +3277,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF2A2D3A),
-            const Color(0xFF1E212E).withValues(alpha: 0.85),
-          ],
-        ),
+        color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.15),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3580,26 +3563,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF2A2D3A),
-              const Color(0xFF1E212E).withValues(alpha: 0.85),
-            ],
-          ),
+          color: const Color(0xFF1A1A2E),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.15),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
         ),
         child: Row(
           children: [
@@ -3811,12 +3776,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
+        color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4409,6 +4370,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const ContestsDashboardWidget(),
+          const SizedBox(height: 24),
+          _buildDailyPointsCard(dayIndex),
+          const SizedBox(height: 24),
+          _buildCompoundHabitsProgressCard(dayIndex),
         ],
       ),
     );
@@ -4434,12 +4399,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
+        color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4572,12 +4533,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
+        color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4803,26 +4760,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                const Color(0xFF2A2D3A),
-                const Color(0xFF1E212E).withValues(alpha: 0.8),
-              ],
-            ),
+            color: const Color(0xFF1A1A2E),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: borderColor,
               width: borderWidth,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: Row(
             children: [
@@ -5190,12 +5133,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
+        color: const Color(0xFF1A1A2E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -18,6 +18,18 @@ class _HabitListScreenState extends State<HabitListScreen> {
   Set<String> _compoundHabitIds = {};
   bool _isLoading = true;
   String? _error;
+  String? _selectedCategory; // null means "All"
+
+  List<String> get _categories {
+    final cats = _habits.map((h) => h.category).toSet().toList();
+    cats.sort();
+    return cats;
+  }
+
+  List<Habit> get _filteredHabits {
+    if (_selectedCategory == null) return _habits;
+    return _habits.where((h) => h.category == _selectedCategory).toList();
+  }
 
   @override
   void initState() {
@@ -270,6 +282,70 @@ class _HabitListScreenState extends State<HabitListScreen> {
       ),
       body: Column(
         children: [
+          // Category filter chips
+          if (_habits.isNotEmpty && _categories.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    // "All" chip
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(
+                          'All',
+                          style: TextStyle(
+                            color: _selectedCategory == null ? Colors.white : Colors.grey.shade300,
+                            fontWeight: _selectedCategory == null ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        selected: _selectedCategory == null,
+                        onSelected: (_) => setState(() => _selectedCategory = null),
+                        backgroundColor: Colors.grey.shade800,
+                        selectedColor: Theme.of(context).colorScheme.primary,
+                        showCheckmark: false,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: _selectedCategory == null 
+                                ? Theme.of(context).colorScheme.primary 
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Category chips
+                    ..._categories.map((category) => Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: FilterChip(
+                        label: Text(
+                          category,
+                          style: TextStyle(
+                            color: _selectedCategory == category ? Colors.white : Colors.grey.shade300,
+                            fontWeight: _selectedCategory == category ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        selected: _selectedCategory == category,
+                        onSelected: (_) => setState(() => _selectedCategory = category),
+                        backgroundColor: Colors.grey.shade800,
+                        selectedColor: Theme.of(context).colorScheme.primary,
+                        showCheckmark: false,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          side: BorderSide(
+                            color: _selectedCategory == category 
+                                ? Theme.of(context).colorScheme.primary 
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -287,15 +363,17 @@ class _HabitListScreenState extends State<HabitListScreen> {
                           ],
                         ),
                       )
-                    : _habits.isEmpty
-                        ? const Center(
-                            child: Text('No habits yet. Add one!'),
+                    : _filteredHabits.isEmpty
+                        ? Center(
+                            child: Text(_selectedCategory != null 
+                              ? 'No habits in this category' 
+                              : 'No habits yet. Add one!'),
                           )
                         : ListView.builder(
                             padding: const EdgeInsets.all(16),
-                            itemCount: _habits.length,
+                            itemCount: _filteredHabits.length,
                             itemBuilder: (context, index) {
-                              final habit = _habits[index];
+                              final habit = _filteredHabits[index];
                               return Card(
                                 key: ValueKey(habit.id),
                                 child: ListTile(

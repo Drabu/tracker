@@ -14,6 +14,9 @@ class _ContestScreenState extends State<ContestScreen> {
   List<Contest> _contests = [];
   bool _isLoading = true;
 
+  List<Contest> get _activeContests => _contests.where((c) => !c.isEnded).toList();
+  List<Contest> get _pastContests => _contests.where((c) => c.isEnded).toList();
+
   @override
   void initState() {
     super.initState();
@@ -99,17 +102,226 @@ class _ContestScreenState extends State<ContestScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: _loadContests,
-                  child: ListView.builder(
+                  child: ListView(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _contests.length,
-                    itemBuilder: (context, index) {
-                      return ContestCard(
-                        contest: _contests[index],
-                        onRefresh: _loadContests,
-                      );
-                    },
+                    children: [
+                      // Active/Upcoming Contests
+                      if (_activeContests.isNotEmpty) ...[
+                        _buildSectionHeader('Active & Upcoming', Icons.play_circle_outline, const Color(0xFF58A6FF)),
+                        const SizedBox(height: 12),
+                        ..._activeContests.map((contest) => ContestCard(
+                          contest: contest,
+                          onRefresh: _loadContests,
+                        )),
+                        const SizedBox(height: 24),
+                      ],
+                      
+                      // Past Contests with Winners
+                      if (_pastContests.isNotEmpty) ...[
+                        _buildSectionHeader('Past Contests', Icons.emoji_events, const Color(0xFFFFD700)),
+                        const SizedBox(height: 12),
+                        _buildWinnersShowcase(),
+                        const SizedBox(height: 16),
+                        ..._pastContests.map((contest) => ContestCard(
+                          contest: contest,
+                          onRefresh: _loadContests,
+                        )),
+                      ],
+                    ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon, Color color) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.9),
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWinnersShowcase() {
+    // Get winners from all past contests
+    final winners = <Map<String, dynamic>>[];
+    for (final contest in _pastContests) {
+      if (contest.participants.isNotEmpty) {
+        final sorted = List<ContestParticipant>.from(contest.participants)
+          ..sort((a, b) => b.totalScore.compareTo(a.totalScore));
+        final winner = sorted.first;
+        winners.add({
+          'contest': contest,
+          'winner': winner,
+        });
+      }
+    }
+
+    if (winners.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFFFD700).withOpacity(0.15),
+            const Color(0xFF161B22),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFFFFD700).withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.military_tech, color: Color(0xFFFFD700), size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Hall of Champions',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.95),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: winners.map((data) {
+                final contest = data['contest'] as Contest;
+                final winner = data['winner'] as ContestParticipant;
+                return _buildWinnerCard(contest, winner);
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWinnerCard(Contest contest, ContestParticipant winner) {
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFD700).withOpacity(0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Winner photo with crown
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: const Color(0xFFFFD700),
+                    width: 3,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD700).withOpacity(0.3),
+                      blurRadius: 12,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: winner.userPhoto != null && winner.userPhoto!.isNotEmpty
+                    ? CircleAvatar(
+                        radius: 32,
+                        backgroundImage: NetworkImage(winner.userPhoto!),
+                      )
+                    : CircleAvatar(
+                        radius: 32,
+                        backgroundColor: const Color(0xFFFFD700).withOpacity(0.2),
+                        child: Text(
+                          winner.userName.isNotEmpty 
+                              ? winner.userName[0].toUpperCase() 
+                              : '?',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD700),
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+              ),
+              const Positioned(
+                top: -8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Text('👑', style: TextStyle(fontSize: 20)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Winner name
+          Text(
+            winner.userName.split(' ').first,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          // Contest name
+          Text(
+            contest.name,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 11,
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          const SizedBox(height: 6),
+          // Score
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFD700).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '${winner.totalScore} pts',
+              style: const TextStyle(
+                color: Color(0xFFFFD700),
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

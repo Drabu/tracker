@@ -283,4 +283,77 @@ class ApiService {
       throw Exception('Failed to save Alexa settings');
     }
   }
+
+  // Generate Alexa link code for skill linking
+  static Future<String> generateAlexaLinkCode(String userId) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/alexa/link'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'userId': userId}),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['code'];
+    }
+    throw Exception('Failed to generate link code');
+  }
+
+  // Get Alexa Reminder settings (LWA OAuth)
+  static Future<Map<String, dynamic>> getAlexaReminderSettings(String userId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/users/$userId/alexa-reminder-settings'));
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load Alexa Reminder settings');
+  }
+
+  // Save Alexa Reminder settings (after OAuth)
+  static Future<void> setAlexaReminderSettings(
+    String userId,
+    String accessToken,
+    String refreshToken,
+    String apiEndpoint,
+  ) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/users/$userId/alexa-reminder-settings'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'accessToken': accessToken,
+        'refreshToken': refreshToken,
+        'apiEndpoint': apiEndpoint,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to save Alexa Reminder settings');
+    }
+  }
+
+  // Exchange Alexa OAuth code for tokens
+  static Future<void> exchangeAlexaReminderToken(
+    String userId,
+    String code,
+    String redirectUri,
+  ) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/users/$userId/alexa-reminder-token-exchange'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'code': code,
+        'redirectUri': redirectUri,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to exchange Alexa token: ${response.body}');
+    }
+  }
+
+  // Delete Alexa Reminder settings (disconnect)
+  static Future<void> deleteAlexaReminderSettings(String userId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/users/$userId/alexa-reminder-settings'),
+    );
+    if (response.statusCode != 200 && response.statusCode != 204) {
+      throw Exception('Failed to disconnect Alexa Reminders');
+    }
+  }
 }

@@ -18,8 +18,11 @@ import 'screens/social_settings_screen.dart';
 import 'models/models.dart';
 import 'services/api_service.dart';
 import 'services/auth_service.dart';
+import 'services/deep_link_handler.dart';
 import 'widgets/expandable_sidebar.dart';
 import 'widgets/contests_dashboard_widget.dart' show ContestsDashboardWidget, contestRefreshNotifier;
+import 'widgets/category_pie_chart.dart';
+import 'screens/daily_insights_screen.dart';
 
 enum HabitState {
   none,
@@ -34,6 +37,10 @@ enum HabitState {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AuthService.init();
+  
+  // Initialize deep link handler for OAuth callbacks
+  await DeepLinkHandler().init();
+  
   runApp(const DailyTrackerApp());
 }
 
@@ -3458,8 +3465,105 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
+          // Time Distribution Pie Chart
+          if (_timelineEntries.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              height: 1,
+              color: Colors.white.withValues(alpha: 0.1),
+            ),
+            const SizedBox(height: 16),
+            _buildInlinePieChart(),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildInlinePieChart() {
+    final userId = AuthService.currentUser?.id ?? '';
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.pie_chart_rounded,
+                  color: const Color(0xFF6366F1),
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'TIME DISTRIBUTION',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.7),
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DailyInsightsScreen(
+                      userId: userId,
+                      initialDate: _timelineSelectedDate,
+                    ),
+                  ),
+                );
+              },
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Details',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 10,
+                    color: Color(0xFF6366F1),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: CategoryPieChart(
+            entries: _timelineEntries,
+            size: 140,
+            centerSpaceRadius: 35,
+            showLegend: false,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DailyInsightsScreen(
+                    userId: userId,
+                    initialDate: _timelineSelectedDate,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

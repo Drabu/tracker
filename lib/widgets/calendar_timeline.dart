@@ -31,7 +31,7 @@ class CalendarTimeline extends StatefulWidget {
 class _CalendarTimelineState extends State<CalendarTimeline> {
   static const double hourHeight = 150.0;
   static const double timeGutterWidth = 56.0;
-  static const double resizeHandleHeight = 12.0;
+  static const double resizeHandleHeight = 28.0; // Larger touch target
   
   final ScrollController _scrollController = ScrollController();
   
@@ -358,24 +358,97 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     );
   }
 
+  // Calculate column layout for overlapping entries
+  List<_EntryLayout> _calculateEntryLayouts() {
+    final layouts = <_EntryLayout>[];
+    
+    for (int i = 0; i < widget.entries.length; i++) {
+      final entry = widget.entries[i];
+      final isBeingResized = _isResizing && _resizingIndex == i;
+      final isBeingMoved = _isMoving && _movingIndex == i;
+      
+      final startMinutes = isBeingResized 
+          ? _resizeStartMinutes! 
+          : (isBeingMoved ? _moveStartMinutes! : entry.startMinutes);
+      final endMinutes = isBeingResized 
+          ? _resizeEndMinutes! 
+          : (isBeingMoved ? _moveEndMinutes! : entry.endMinutes);
+      
+      layouts.add(_EntryLayout(
+        index: i,
+        startMinutes: startMinutes,
+        endMinutes: endMinutes,
+        column: 0,
+        totalColumns: 1,
+      ));
+    }
+    
+    // Sort by start time for processing
+    layouts.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    
+    // Assign columns to overlapping entries
+    for (int i = 0; i < layouts.length; i++) {
+      final current = layouts[i];
+      final overlapping = <_EntryLayout>[current];
+      
+      // Find all entries that overlap with current
+      for (int j = 0; j < layouts.length; j++) {
+        if (i == j) continue;
+        final other = layouts[j];
+        if (_entriesOverlap(current, other)) {
+          overlapping.add(other);
+        }
+      }
+      
+      if (overlapping.length > 1) {
+        // Sort overlapping entries by their original index for consistent ordering
+        overlapping.sort((a, b) => a.index.compareTo(b.index));
+        
+        // Assign columns
+        final usedColumns = <int>{};
+        for (final entry in overlapping) {
+          // Find first available column
+          int col = 0;
+          while (usedColumns.contains(col)) {
+            col++;
+          }
+          
+          // Check if this entry already has a column assigned from a previous group
+          if (entry.column == 0 || entry.totalColumns < overlapping.length) {
+            entry.column = overlapping.indexOf(entry);
+            entry.totalColumns = overlapping.length;
+          }
+          usedColumns.add(entry.column);
+        }
+      }
+    }
+    
+    return layouts;
+  }
+  
+  bool _entriesOverlap(_EntryLayout a, _EntryLayout b) {
+    return a.startMinutes < b.endMinutes && b.startMinutes < a.endMinutes;
+  }
+
   List<Widget> _buildEntries() {
     final List<Widget> widgets = [];
+    final layouts = _calculateEntryLayouts();
+    
+    // Create a map for quick lookup
+    final layoutMap = {for (var l in layouts) l.index: l};
     
     for (int i = 0; i < widget.entries.length; i++) {
       final entry = widget.entries[i];
       final habit = widget.habitsMap[entry.habitId];
       final index = i;
+      final layout = layoutMap[i]!;
       
       final isBeingResized = _isResizing && _resizingIndex == index;
       final isBeingMoved = _isMoving && _movingIndex == index;
       final isActive = isBeingResized || isBeingMoved;
       
-      final displayStartMinutes = isBeingResized 
-          ? _resizeStartMinutes! 
-          : (isBeingMoved ? _moveStartMinutes! : entry.startMinutes);
-      final displayEndMinutes = isBeingResized 
-          ? _resizeEndMinutes! 
-          : (isBeingMoved ? _moveEndMinutes! : entry.endMinutes);
+      final displayStartMinutes = layout.startMinutes;
+      final displayEndMinutes = layout.endMinutes;
       
       final startY = (displayStartMinutes / 60) * hourHeight;
       final height = ((displayEndMinutes - displayStartMinutes) / 60 * hourHeight).clamp(20.0, double.infinity);
@@ -383,11 +456,17 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
       final color = _getPointsBasedColor(entry.points);
       final isHovered = _hoveredEntryIndex == index;
       
+      // Calculate horizontal position based on column
+      final availableWidth = MediaQuery.of(context).size.width - timeGutterWidth - 4 - 8;
+      final columnWidth = availableWidth / layout.totalColumns;
+      final leftOffset = timeGutterWidth + 4 + (layout.column * columnWidth);
+      final entryWidth = columnWidth - 2; // 2px gap between columns
+      
       widgets.add(
         Positioned(
-          left: timeGutterWidth + 4,
+          left: leftOffset,
           top: startY,
-          right: 8,
+          width: entryWidth,
           height: height,
           child: MouseRegion(
             onEnter: (_) => setState(() => _hoveredEntryIndex = index),
@@ -398,9 +477,9 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
             }),
             child: GestureDetector(
               onTap: () => widget.onEntryTap(entry, index),
-              onVerticalDragStart: (details) => _handleMoveStart(index, details),
-              onVerticalDragUpdate: (details) => _handleMoveUpdate(details),
-              onVerticalDragEnd: (_) => _handleMoveEnd(),
+              onLongPressStart: (details) => _handleMoveStart(index, DragStartDetails(globalPosition: details.globalPosition)),
+              onLongPressMoveUpdate: (details) => _handleMoveUpdate(DragUpdateDetails(globalPosition: details.globalPosition, delta: Offset.zero)),
+              onLongPressEnd: (_) => _handleMoveEnd(),
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
@@ -528,69 +607,83 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
                     ),
                   ),
                   
-                  // Top resize handle
-                  if (isHovered || isBeingResized)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: -resizeHandleHeight / 2,
-                      height: resizeHandleHeight,
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.resizeRow,
-                        onEnter: (_) => setState(() => _hoveringTop = true),
-                        onExit: (_) => setState(() => _hoveringTop = false),
-                        child: GestureDetector(
-                          onVerticalDragStart: (details) => _handleResizeStart(index, true, details.globalPosition.dy),
-                          onVerticalDragUpdate: (details) => _handleResizeUpdate(details),
-                          onVerticalDragEnd: (_) => _handleResizeEnd(),
-                          child: Center(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              width: _hoveringTop || (isBeingResized && _resizingTop) ? 48 : 32,
-                              height: _hoveringTop || (isBeingResized && _resizingTop) ? 6 : 4,
-                              decoration: BoxDecoration(
-                                color: _hoveringTop || (isBeingResized && _resizingTop)
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
+                  // Top resize handle - always visible for easier touch access
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: -resizeHandleHeight / 2,
+                    height: resizeHandleHeight,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeRow,
+                      onEnter: (_) => setState(() => _hoveringTop = true),
+                      onExit: (_) => setState(() => _hoveringTop = false),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onVerticalDragStart: (details) => _handleResizeStart(index, true, details.globalPosition.dy),
+                        onVerticalDragUpdate: (details) => _handleResizeUpdate(details),
+                        onVerticalDragEnd: (_) => _handleResizeEnd(),
+                        child: Center(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: _hoveringTop || (isBeingResized && _resizingTop) ? 72 : 56,
+                            height: _hoveringTop || (isBeingResized && _resizingTop) ? 8 : 5,
+                            decoration: BoxDecoration(
+                              color: _hoveringTop || (isBeingResized && _resizingTop)
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
+                  ),
                   
-                  // Bottom resize handle
-                  if (isHovered || isBeingResized)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: -resizeHandleHeight / 2,
-                      height: resizeHandleHeight,
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.resizeRow,
-                        onEnter: (_) => setState(() => _hoveringBottom = true),
-                        onExit: (_) => setState(() => _hoveringBottom = false),
-                        child: GestureDetector(
-                          onVerticalDragStart: (details) => _handleResizeStart(index, false, details.globalPosition.dy),
-                          onVerticalDragUpdate: (details) => _handleResizeUpdate(details),
-                          onVerticalDragEnd: (_) => _handleResizeEnd(),
-                          child: Center(
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              width: _hoveringBottom || (isBeingResized && !_resizingTop) ? 48 : 32,
-                              height: _hoveringBottom || (isBeingResized && !_resizingTop) ? 6 : 4,
-                              decoration: BoxDecoration(
-                                color: _hoveringBottom || (isBeingResized && !_resizingTop)
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.6),
-                                borderRadius: BorderRadius.circular(3),
-                              ),
+                  // Bottom resize handle - always visible for easier touch access
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: -resizeHandleHeight / 2,
+                    height: resizeHandleHeight,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.resizeRow,
+                      onEnter: (_) => setState(() => _hoveringBottom = true),
+                      onExit: (_) => setState(() => _hoveringBottom = false),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onVerticalDragStart: (details) => _handleResizeStart(index, false, details.globalPosition.dy),
+                        onVerticalDragUpdate: (details) => _handleResizeUpdate(details),
+                        onVerticalDragEnd: (_) => _handleResizeEnd(),
+                        child: Center(
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: _hoveringBottom || (isBeingResized && !_resizingTop) ? 72 : 56,
+                            height: _hoveringBottom || (isBeingResized && !_resizingTop) ? 8 : 5,
+                            decoration: BoxDecoration(
+                              color: _hoveringBottom || (isBeingResized && !_resizingTop)
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(4),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
@@ -706,4 +799,21 @@ class _CalendarTimelineState extends State<CalendarTimeline> {
     ];
     return colors[hash.abs() % colors.length];
   }
+}
+
+// Helper class for tracking entry layout with overlapping support
+class _EntryLayout {
+  final int index;
+  final int startMinutes;
+  final int endMinutes;
+  int column;
+  int totalColumns;
+  
+  _EntryLayout({
+    required this.index,
+    required this.startMinutes,
+    required this.endMinutes,
+    required this.column,
+    required this.totalColumns,
+  });
 }

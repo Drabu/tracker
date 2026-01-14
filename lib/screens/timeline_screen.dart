@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../widgets/clock_time_picker.dart';
 import '../widgets/calendar_timeline.dart';
 import 'habit_list_screen.dart';
+import 'daily_insights_screen.dart';
 
 class TimelineScreen extends StatefulWidget {
   final String userId;
@@ -372,6 +373,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
     int endHour = entry.endMinutes ~/ 60;
     int endMinute = entry.endMinutes % 60;
     final maxAddablePoints = _remainingPoints + entry.points;
+    Habit? selectedHabit = _habitsMap[entry.habitId];
 
     showDialog(
       context: context,
@@ -381,11 +383,72 @@ class _TimelineScreenState extends State<TimelineScreen> {
           final isValidDuration = duration >= minDurationMinutes && duration <= maxDurationMinutes;
           
           return AlertDialog(
-            title: Text('Edit ${_habitsMap[entry.habitId]?.title ?? 'Entry'}'),
+            title: Text('Edit ${selectedHabit?.title ?? 'Entry'}'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Habit selector
+                  InkWell(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        builder: (ctx) => DraggableScrollableSheet(
+                          initialChildSize: 0.7,
+                          minChildSize: 0.5,
+                          maxChildSize: 0.95,
+                          expand: false,
+                          builder: (ctx, scrollController) => HabitListScreen(
+                            onHabitSelected: (habit) {
+                              Navigator.pop(ctx);
+                              setDialogState(() {
+                                selectedHabit = habit;
+                              });
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade800,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade600),
+                      ),
+                      child: Row(
+                        children: [
+                          if (selectedHabit?.icon.isNotEmpty == true)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Text(selectedHabit!.icon, style: const TextStyle(fontSize: 24)),
+                            ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Habit',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                                Text(
+                                  selectedHabit?.title ?? 'Select habit',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, color: Colors.grey),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   DualClockTimePicker(
                     startHour: startHour,
                     startMinute: startMinute,
@@ -465,10 +528,11 @@ class _TimelineScreenState extends State<TimelineScreen> {
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: isValidDuration
+                onPressed: isValidDuration && selectedHabit != null
                     ? () {
                         setState(() {
                           _entries[index] = entry.copyWith(
+                            habit: selectedHabit,
                             startMinutes: startHour * 60 + startMinute,
                             durationMinutes: duration,
                             points: points,
@@ -639,6 +703,21 @@ class _TimelineScreenState extends State<TimelineScreen> {
       appBar: AppBar(
         title: const Text('Timeline'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.pie_chart_rounded),
+            tooltip: 'Daily Insights',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DailyInsightsScreen(
+                    userId: widget.userId,
+                    initialDate: _selectedDate,
+                  ),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.delete_sweep),
             tooltip: 'Clear all entries',

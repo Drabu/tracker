@@ -29,7 +29,7 @@ import 'widgets/contests_dashboard_widget.dart' show ContestsDashboardWidget, co
 import 'widgets/category_pie_chart.dart';
 import 'screens/ios_home_screen.dart';
 import 'screens/ios_dashboard_screen.dart';
-import 'widgets/weekly_momentum_widget.dart';
+import 'widgets/weekly_momentum_widget.dart' show WeeklyMomentumWidget, momentumRefreshNotifier;
 import 'screens/daily_insights_screen.dart';
 
 bool get isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
@@ -2138,7 +2138,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _timelineEntries[entryIndex] = entry.copyWith(completionStatus: status);
       });
     }
-    
+
+    // Immediately update Weekly Momentum with optimistic data
+    momentumRefreshNotifier.updateTodayPoints(_timelineEntries);
+
     // Play sound for completion states
     _playCompletionSound(_completionStatusToHabitState(status));
     
@@ -2149,13 +2152,37 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         status: _completionStatusToString(status),
       );
       
-      setState(() {
-        _currentTimeline = updatedTimeline;
-        _timelineEntries = updatedTimeline.entries;
-      });
-      
-      // Refresh contests to show updated scores
+      // Sync with server data without replacing the entire list to avoid
+      // widget-tree flicker. Only trigger a rebuild if the server returned
+      // data that differs from our optimistic update.
+      _currentTimeline = updatedTimeline;
+      final serverEntries = updatedTimeline.entries;
+      bool needsRebuild = false;
+
+      // Check if server data differs from our optimistic state
+      if (serverEntries.length != _timelineEntries.length) {
+        needsRebuild = true;
+      } else {
+        for (int i = 0; i < serverEntries.length; i++) {
+          final local = _timelineEntries.indexWhere((e) => e.id == serverEntries[i].id);
+          if (local == -1 ||
+              _timelineEntries[local].completionStatus != serverEntries[i].completionStatus ||
+              _timelineEntries[local].points != serverEntries[i].points) {
+            needsRebuild = true;
+            break;
+          }
+        }
+      }
+
+      if (needsRebuild) {
+        setState(() {
+          _timelineEntries = serverEntries;
+        });
+      }
+
+      // Refresh contests and momentum to show updated scores
       contestRefreshNotifier.refresh();
+      momentumRefreshNotifier.updateTodayPoints(_timelineEntries);
       
       // Sync with habit tracking state using habit ID for consistency
       final habitId = entry.habitId;
@@ -2171,6 +2198,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         setState(() {
           _timelineEntries[entryIndex] = entry;
         });
+        momentumRefreshNotifier.updateTodayPoints(_timelineEntries);
       }
     }
   }
@@ -3514,20 +3542,28 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         ),
         const SizedBox(height: 12),
         Center(
-          child: CategoryPieChart(
-            entries: _timelineEntries,
-            size: isIOS ? 110 : 140,
-            centerSpaceRadius: isIOS ? 28 : 35,
-            showLegend: false,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => DailyInsightsScreen(
-                    userId: userId,
-                    initialDate: _timelineSelectedDate,
-                  ),
-                ),
+          child: Builder(
+            builder: (context) {
+              final now = DateTime.now();
+              final todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
+              return CategoryPieChart(
+                entries: _timelineEntries,
+                size: isIOS ? 110 : 140,
+                centerSpaceRadius: isIOS ? 28 : 35,
+                showLegend: false,
+                currentScore: _getDailyScore(todayIndex),
+                maxScore: _getMaxDailyScoreForDay(todayIndex),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DailyInsightsScreen(
+                        userId: userId,
+                        initialDate: _timelineSelectedDate,
+                      ),
+                    ),
+                  );
+                },
               );
             },
           ),
@@ -3709,8 +3745,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(height: 16),
           _buildScreensaverButton(),
           const SizedBox(height: 16),
-          // Timeline entries from backend - organized by time slot
-          if (_timelineEntries.isNotEmpty) ...[
+          // Timeline entries from backend - organized by time slot (only entries with points)
+          if (_timelineEntries.any((e) => e.points > 0)) ...[
             _buildTimeSlotSection(),
           ],
         ],
@@ -3719,14 +3755,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildTimeSlotSection() {
-    // Sort timeline entries by start time
+    // Sort timeline entries by start time, only show entries with points
     final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
       ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    final pointsEntries = sortedEntries.where((e) => e.points > 0).toList();
     
     // Group entries by time periods
-    final morningEntries = sortedEntries.where((e) => e.startMinutes < 720).toList(); // Before 12:00
-    final afternoonEntries = sortedEntries.where((e) => e.startMinutes >= 720 && e.startMinutes < 1080).toList(); // 12:00-18:00
-    final eveningEntries = sortedEntries.where((e) => e.startMinutes >= 1080).toList(); // After 18:00
+    final morningEntries = pointsEntries.where((e) => e.startMinutes < 720).toList(); // Before 12:00
+    final afternoonEntries = pointsEntries.where((e) => e.startMinutes >= 720 && e.startMinutes < 1080).toList(); // 12:00-18:00
+    final eveningEntries = pointsEntries.where((e) => e.startMinutes >= 1080).toList(); // After 18:00
     
     // Determine current time section
     final now = DateTime.now();

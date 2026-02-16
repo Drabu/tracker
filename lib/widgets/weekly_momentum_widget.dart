@@ -5,6 +5,28 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
+/// Notifier to trigger momentum widget updates when completions change.
+/// Call [updateTodayPoints] with the current timeline entries for a smooth
+/// local update, or [refresh] to re-fetch all data from the API.
+class MomentumRefreshNotifier extends ChangeNotifier {
+  List<Event>? _todayEntries;
+  List<Event>? get todayEntries => _todayEntries;
+
+  /// Update today's points locally from the current timeline entries.
+  void updateTodayPoints(List<Event> entries) {
+    _todayEntries = entries;
+    notifyListeners();
+  }
+
+  /// Signal a full refresh (re-fetch from API).
+  void refresh() {
+    _todayEntries = null;
+    notifyListeners();
+  }
+}
+
+final momentumRefreshNotifier = MomentumRefreshNotifier();
+
 class WeeklyMomentumWidget extends StatefulWidget {
   const WeeklyMomentumWidget({super.key});
 
@@ -15,6 +37,7 @@ class WeeklyMomentumWidget extends StatefulWidget {
 class _WeeklyMomentumWidgetState extends State<WeeklyMomentumWidget>
     with SingleTickerProviderStateMixin {
   List<int> _dailyPoints = List.filled(7, 0);
+  List<int> _previousPoints = List.filled(7, 0);
   bool _isLoading = true;
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -38,13 +61,48 @@ class _WeeklyMomentumWidgetState extends State<WeeklyMomentumWidget>
       parent: _animationController,
       curve: Curves.easeOutCubic,
     );
+    momentumRefreshNotifier.addListener(_onMomentumUpdate);
     _loadWeeklyData();
   }
 
   @override
   void dispose() {
+    momentumRefreshNotifier.removeListener(_onMomentumUpdate);
     _animationController.dispose();
     super.dispose();
+  }
+
+  void _onMomentumUpdate() {
+    final entries = momentumRefreshNotifier.todayEntries;
+    if (entries != null) {
+      _updateTodayFromEntries(entries);
+    } else {
+      _loadWeeklyData();
+    }
+  }
+
+  void _updateTodayFromEntries(List<Event> entries) {
+    int todayPoints = 0;
+    for (var entry in entries) {
+      if (entry.completionStatus == CompletionStatus.completed ||
+          entry.completionStatus == CompletionStatus.onTime ||
+          entry.completionStatus == CompletionStatus.delayed ||
+          entry.completionStatus == CompletionStatus.partial) {
+        todayPoints += entry.points;
+      }
+    }
+    todayPoints = math.min(todayPoints, maxPoints);
+
+    if (!mounted) return;
+    // Only animate if the value actually changed
+    if (_dailyPoints.last == todayPoints) return;
+
+    setState(() {
+      _previousPoints = List.from(_dailyPoints);
+      _dailyPoints[6] = todayPoints;
+    });
+    // Animate smoothly from old to new
+    _animationController.forward(from: 0);
   }
 
   Future<void> _loadWeeklyData() async {
@@ -84,10 +142,11 @@ class _WeeklyMomentumWidgetState extends State<WeeklyMomentumWidget>
 
       if (mounted) {
         setState(() {
+          _previousPoints = _isLoading ? points : List.from(_dailyPoints);
           _dailyPoints = points;
           _isLoading = false;
         });
-        _animationController.forward();
+        _animationController.forward(from: _previousPoints == points ? 0 : 0);
       }
     } catch (e) {
       if (mounted) {
@@ -269,9 +328,11 @@ class _WeeklyMomentumWidgetState extends State<WeeklyMomentumWidget>
 
   Widget _buildChart() {
     final dayLabels = _getDayLabels();
-    final animatedPoints = _dailyPoints
-        .map((p) => (p * _animation.value).toDouble())
-        .toList();
+    final animatedPoints = List.generate(7, (i) {
+      final from = _previousPoints[i].toDouble();
+      final to = _dailyPoints[i].toDouble();
+      return from + (to - from) * _animation.value;
+    });
 
     return LineChart(
       LineChartData(

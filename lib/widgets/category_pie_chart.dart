@@ -10,6 +10,8 @@ class CategoryPieChart extends StatefulWidget {
   final bool showLegend;
   final bool showCompletionOverlay;
   final VoidCallback? onTap;
+  final int? currentScore;
+  final int? maxScore;
 
   const CategoryPieChart({
     super.key,
@@ -19,6 +21,8 @@ class CategoryPieChart extends StatefulWidget {
     this.showLegend = true,
     this.showCompletionOverlay = true,
     this.onTap,
+    this.currentScore,
+    this.maxScore,
   });
 
   @override
@@ -63,9 +67,22 @@ class _CategoryPieChartState extends State<CategoryPieChart>
   @override
   void didUpdateWidget(CategoryPieChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.entries != widget.entries) {
+    // Only replay the full entrance animation when the structure changes
+    // (different number of entries or different categories), not on
+    // completion-status-only updates which just change scores/colors.
+    if (_hasStructuralChange(oldWidget.entries, widget.entries)) {
       _animationController.forward(from: 0);
     }
+  }
+
+  /// Returns true when entries were added/removed or categories changed,
+  /// false for status-only updates on the same set of entries.
+  bool _hasStructuralChange(List<Event> oldEntries, List<Event> newEntries) {
+    if (oldEntries.length != newEntries.length) return true;
+    for (int i = 0; i < oldEntries.length; i++) {
+      if (oldEntries[i].id != newEntries[i].id) return true;
+    }
+    return false;
   }
 
   @override
@@ -217,35 +234,7 @@ class _CategoryPieChartState extends State<CategoryPieChart>
                           ),
                           if (widget.showCompletionOverlay)
                             _buildCompletionOverlay(completionRate),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '${((totalMinutes / (24 * 60)) * 100).toInt()}%',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Text(
-                                'of Day',
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  color: Colors.white.withOpacity(0.6),
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${(totalMinutes / 60).toStringAsFixed(1)}h / 24h',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white.withOpacity(0.8),
-                                ),
-                              ),
-                            ],
-                          ),
+                          _buildCenterLabel(totalMinutes),
                         ],
                       ),
                     ),
@@ -260,6 +249,74 @@ class _CategoryPieChartState extends State<CategoryPieChart>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildCenterLabel(int totalMinutes) {
+    final hasScores = widget.currentScore != null && widget.maxScore != null && widget.maxScore! > 0;
+
+    if (hasScores) {
+      final percentage = ((widget.currentScore! / widget.maxScore!) * 100).toInt();
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$percentage%',
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          Text(
+            'of Day',
+            style: TextStyle(
+              fontSize: 8,
+              color: Colors.white.withOpacity(0.6),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${widget.currentScore} / ${widget.maxScore} pts',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withOpacity(0.8),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Fallback: time-based
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '${((totalMinutes / (24 * 60)) * 100).toInt()}%',
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        Text(
+          'of Day',
+          style: TextStyle(
+            fontSize: 8,
+            color: Colors.white.withOpacity(0.6),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${(totalMinutes / 60).toStringAsFixed(1)}h / 24h',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+            color: Colors.white.withOpacity(0.8),
+          ),
+        ),
+      ],
     );
   }
 

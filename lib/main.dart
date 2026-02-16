@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart'
+    show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:async';
 import 'dart:ui';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import 'dart:html' as html show window;
-import 'dart:js' as js;
-import 'dart:html' as html;
+
+import 'platform/web_adapter.dart' as web;
+
 import 'screens/panel_config_screen.dart';
 import 'screens/timeline_config_screen.dart';
 import 'screens/timeline_screen.dart';
@@ -24,8 +27,12 @@ import 'services/deep_link_handler.dart';
 import 'widgets/expandable_sidebar.dart';
 import 'widgets/contests_dashboard_widget.dart' show ContestsDashboardWidget, contestRefreshNotifier;
 import 'widgets/category_pie_chart.dart';
+import 'screens/ios_home_screen.dart';
+import 'screens/ios_dashboard_screen.dart';
 import 'widgets/weekly_momentum_widget.dart';
 import 'screens/daily_insights_screen.dart';
+
+bool get isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
 enum HabitState {
   none,
@@ -91,7 +98,7 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
         ),
       ),
       home: _isLoggedIn
-          ? const DailyTrackerHome()
+          ? (isIOS ? const IOSHomeScreen() : const DailyTrackerHome())
           : LoginScreen(
               onLoginSuccess: () {
                 setState(() {
@@ -106,7 +113,9 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
 enum ViewType { day, week, month, year }
 
 class DailyTrackerHome extends StatefulWidget {
-  const DailyTrackerHome({super.key});
+  final bool showSidebar;
+
+  const DailyTrackerHome({super.key, this.showSidebar = true});
 
   @override
   State<DailyTrackerHome> createState() => _DailyTrackerHomeState();
@@ -162,9 +171,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   bool _isIdleMode = false;
   DateTime _lastInteraction = DateTime.now();
   String _currentHabit = '';
-  js.JsObject? _audioContext;
-  html.AudioElement? _audioElement;
+  Object? _audioContext;
   bool _audioContextResumed = false;
+
+  late final AudioPlayer _assetAudioPlayer;
+
+  Object? _webCabinChime;
   
   // Schedule section expansion states
   final Map<String, bool> _scheduleSectionExpanded = {
@@ -173,10 +185,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     'Evening': false,
   };
   
-  // Audio elements for different sounds
-  html.AudioElement? _completedSoundElement;
-  html.AudioElement? _missedSoundElement;
-  html.AudioElement? _partialSoundElement;
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -597,7 +605,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     ],
                   )
                 : _buildCurrentView(),
-            if (_currentView == ViewType.day)
+            if (_currentView == ViewType.day && widget.showSidebar)
               ExpandableSidebar(
                 items: [
                   if (kDebugMode)
@@ -1362,140 +1370,113 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _initializeAudio() {
+    _assetAudioPlayer = AudioPlayer();
+
+    if (!web.isWeb) {
+      return;
+    }
+
     try {
-      // Initialize cabin chime for habit changes
-      _audioElement = html.AudioElement();
-      _audioElement!.preload = 'auto';
-      _audioElement!.src = 'assets/assets/sounds/cabin_chime.mp3';
-      
-      // Initialize completion sounds
-      _completedSoundElement = html.AudioElement();
-      _completedSoundElement!.preload = 'auto';
-      _completedSoundElement!.src = 'assets/assets/sounds/breach_lets_go.mp3';
-      
-      _missedSoundElement = html.AudioElement();
-      _missedSoundElement!.preload = 'auto';
-      _missedSoundElement!.src = 'assets/assets/sounds/it_was_at_this_moment.mp3';
-      
-      _partialSoundElement = html.AudioElement();
-      _partialSoundElement!.preload = 'auto';
-      _partialSoundElement!.src = 'assets/assets/sounds/oh_hell_naw.mp3';
-      
-      // Add error handling for all audio elements
-      _audioElement!.onError.listen((event) {
+      _webCabinChime = web.createAudioElement();
+      web.audioSetPreload(_webCabinChime, 'auto');
+      web.audioSetSrc(_webCabinChime, 'assets/assets/sounds/cabin_chime.mp3');
+
+      web.audioOnError(_webCabinChime).listen((event) {
         print('Cabin chime loading error: $event');
       });
-      
-      _completedSoundElement!.onError.listen((event) {
-        print('Completed sound loading error: $event');
-      });
-      
-      _missedSoundElement!.onError.listen((event) {
-        print('Missed sound loading error: $event');
-      });
-      
-      _partialSoundElement!.onError.listen((event) {
-        print('Partial sound loading error: $event');
-      });
-      
     } catch (e) {
       print('Audio element initialization failed: $e');
     }
   }
 
   void _playAirplaneCallSound() async {
-    try {
-      // Ensure audio context is resumed (required by browser autoplay policy)
-      if (_audioContext == null) {
-        _audioContext = js.JsObject(js.context['AudioContext']);
-      }
-      
-      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
-        await _audioContext!.callMethod('resume');
-        _audioContextResumed = true;
-        print('AudioContext resumed for cabin chime');
-      }
+    if (web.isWeb) {
+      try {
+        if (_audioContext == null) {
+          _audioContext = web.createAudioContext();
+        }
 
-      if (_audioElement != null) {
-        _audioElement!.currentTime = 0; // Reset to beginning
-        
-        // Check if audio is ready to play
-        if (_audioElement!.readyState >= 2) { // HAVE_CURRENT_DATA
-          await _audioElement!.play();
-          print('Playing cabin chime for habit change');
-          return; // Success, no need for fallback
-        } else {
-          // If not ready, wait for it to be ready
-          _audioElement!.onCanPlay.first.then((_) async {
-            try {
-              await _audioElement!.play();
-              print('Playing cabin chime for habit change (delayed)');
-            } catch (e) {
-              print('Delayed play error: $e');
-              _playSynthesizedAirplaneSound(); // Fallback to synthesized
-            }
-          });
+        final state = web.audioContextState(_audioContext);
+        if (!_audioContextResumed && state == 'suspended') {
+          await web.audioContextResume(_audioContext);
+          _audioContextResumed = true;
+          print('AudioContext resumed for cabin chime');
+        }
+
+        if (_webCabinChime != null) {
+          web.audioReset(_webCabinChime);
+          if (web.audioReadyState(_webCabinChime) >= 2) {
+            await web.audioPlay(_webCabinChime);
+            print('Playing cabin chime for habit change');
+            return;
+          }
+
           return;
         }
-      } else {
-        print('Audio element not initialized');
+      } catch (e) {
+        print('Error playing cabin chime: $e');
       }
+
+      _playSynthesizedAirplaneSound();
+      return;
+    }
+
+    try {
+      await _assetAudioPlayer.play(AssetSource('sounds/cabin_chime.mp3'));
     } catch (e) {
       print('Error playing cabin chime: $e');
     }
-    
-    // Fallback to synthesized sound
-    _playSynthesizedAirplaneSound();
   }
 
   void _playSynthesizedAirplaneSound() async {
+    if (!web.isWeb) {
+      return;
+    }
+
     try {
-      // Initialize AudioContext if not done yet
       if (_audioContext == null) {
-        _audioContext = js.JsObject(js.context['AudioContext']);
+        _audioContext = web.createAudioContext();
       }
-      
-      // Resume AudioContext if it's suspended (required by browser autoplay policy)
-      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
-        await _audioContext!.callMethod('resume');
+
+      final state = web.audioContextState(_audioContext);
+      if (!_audioContextResumed && state == 'suspended') {
+        await web.audioContextResume(_audioContext);
         _audioContextResumed = true;
         print('AudioContext resumed');
       }
-      
-      // Create airplane call button sound - two-tone chime
-      final oscillator1 = _audioContext!.callMethod('createOscillator');
-      final oscillator2 = _audioContext!.callMethod('createOscillator');
-      final gainNode = _audioContext!.callMethod('createGain');
-      final currentTime = _audioContext!['currentTime'];
-      
-      // First tone - higher pitch (E note - 659.25 Hz)
-      oscillator1['type'] = 'sine';
-      oscillator1['frequency'].callMethod('setValueAtTime', [659.25, currentTime]);
-      
-      // Second tone - lower pitch (C note - 523.25 Hz) 
-      oscillator2['type'] = 'sine';
-      oscillator2['frequency'].callMethod('setValueAtTime', [523.25, currentTime]);
-      
-      // Gain envelope for smooth sound
-      gainNode['gain'].callMethod('setValueAtTime', [0, currentTime]);
-      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.3, currentTime + 0.1]);
-      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.2, currentTime + 0.4]);
-      gainNode['gain'].callMethod('linearRampToValueAtTime', [0, currentTime + 0.8]);
-      
-      // Connect audio nodes
-      oscillator1.callMethod('connect', [gainNode]);
-      oscillator2.callMethod('connect', [gainNode]);
-      gainNode.callMethod('connect', [_audioContext!['destination']]);
-      
-      // Play the two-tone sequence
-      oscillator1.callMethod('start', [currentTime]);
-      oscillator1.callMethod('stop', [currentTime + 0.4]);
-      
-      oscillator2.callMethod('start', [currentTime + 0.4]);
-      oscillator2.callMethod('stop', [currentTime + 0.8]);
-      
+
+      web.evalJs('''
+        try {
+          var AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) { return; }
+          window.__amp_fallback_audio_ctx = window.__amp_fallback_audio_ctx || new AudioContext();
+          var ctx = window.__amp_fallback_audio_ctx;
+          if (ctx.state === 'suspended') { ctx.resume(); }
+          var osc1 = ctx.createOscillator();
+          var osc2 = ctx.createOscillator();
+          var gain = ctx.createGain();
+          var t = ctx.currentTime;
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(659.25, t);
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(523.25, t);
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.3, t + 0.1);
+          gain.gain.linearRampToValueAtTime(0.2, t + 0.4);
+          gain.gain.linearRampToValueAtTime(0, t + 0.8);
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(ctx.destination);
+          osc1.start(t);
+          osc1.stop(t + 0.4);
+          osc2.start(t + 0.4);
+          osc2.stop(t + 0.8);
+        } catch (e) {
+          console.log('Synth sound failed', e);
+        }
+      ''');
+
       print('Playing synthesized airplane sound');
-      
     } catch (e) {
       print('Error playing synthesized airplane sound: $e');
     }
@@ -1517,50 +1498,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _playCompletionSound(HabitState state) async {
-    // Temporarily disabled - no sounds for completed, partial, or missed
     return;
-    
-    try {
-      // Ensure audio context is resumed
-      if (_audioContext == null) {
-        _audioContext = js.JsObject(js.context['AudioContext']);
-      }
-      
-      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
-        await _audioContext!.callMethod('resume');
-        _audioContextResumed = true;
-      }
-
-      html.AudioElement? soundElement;
-      String soundName;
-      
-      switch (state) {
-        case HabitState.completed:
-        case HabitState.onTime:
-          soundElement = _completedSoundElement;
-          soundName = "Let's Go (Completed)";
-          break;
-        case HabitState.missed:
-          soundElement = _missedSoundElement;
-          soundName = "It Was At This Moment (Missed)";
-          break;
-        case HabitState.partial:
-          soundElement = _partialSoundElement;
-          soundName = "Oh Hell Naw (Partial)";
-          break;
-        default:
-          return; // No sound for other states
-      }
-      
-      if (soundElement != null) {
-        soundElement.currentTime = 0; // Reset to beginning
-        await soundElement.play();
-        print('Playing $soundName sound');
-      }
-      
-    } catch (e) {
-      print('Error playing completion sound: $e');
-    }
   }
 
   void _animateProgressUpdate() {
@@ -1653,33 +1591,27 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _categoryProgressNotifier.value = categoryProgress;
   }
 
+  bool _isCompletedStatus(CompletionStatus status) {
+    return status == CompletionStatus.completed ||
+        status == CompletionStatus.onTime ||
+        status == CompletionStatus.delayed ||
+        status == CompletionStatus.partial;
+  }
+
   double _getCompoundProgress(int dayIndex) {
-    List<String> compoundHabitIds = _compoundingHabits.toList();
     int completedCount = 0;
     int totalCount = 0;
     
-    for (String habitId in compoundHabitIds) {
-      if (!_isHabitDisabledById(habitId, dayIndex)) {
-        totalCount++;
-        // Check timeline entries for completion status
-        final entry = _timelineEntries.firstWhere(
-          (e) => e.habitId == habitId,
-          orElse: () => Event(
-            id: '',
-            habit: Habit(id: '', title: '', category: ''),
-            startMinutes: 0,
-            durationMinutes: 0,
-            points: 0,
-            completionStatus: CompletionStatus.none,
-          ),
-        );
-        final status = entry.completionStatus;
-        if (status == CompletionStatus.completed || 
-            status == CompletionStatus.onTime || 
-            status == CompletionStatus.delayed || 
-            status == CompletionStatus.partial) {
-          completedCount++;
-        }
+    for (final entry in _timelineEntries) {
+      if (!entry.isCompound) {
+        continue;
+      }
+      if (_isHabitDisabledById(entry.habitId, dayIndex)) {
+        continue;
+      }
+      totalCount++;
+      if (_isCompletedStatus(entry.completionStatus)) {
+        completedCount++;
       }
     }
     
@@ -1760,9 +1692,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _tryWebWakeLock() {
+    if (!web.isWeb) {
+      return;
+    }
+
     try {
-      // Try to use the Screen Wake Lock API directly
-      js.context.callMethod('eval', ['''
+      web.evalJs('''
         if ('wakeLock' in navigator) {
           navigator.wakeLock.request('screen').then(function(wakeLock) {
             console.log('Screen Wake Lock enabled');
@@ -1773,7 +1708,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         } else {
           console.log('Screen Wake Lock API not supported');
         }
-      ''']);
+      ''');
     } catch (e) {
       print('Web wake lock failed: $e');
     }
@@ -1795,31 +1730,34 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _disableWebWakeLock() {
+    if (!web.isWeb) {
+      return;
+    }
+
     try {
-      js.context.callMethod('eval', ['''
+      web.evalJs('''
         if (window.wakeLockSentinel) {
           window.wakeLockSentinel.release();
           window.wakeLockSentinel = null;
           console.log('Screen Wake Lock released');
         }
-      ''']);
+      ''');
     } catch (e) {
       print('Failed to release web wake lock: $e');
     }
   }
 
   void _startScreenKeepAlive() {
-    // Additional method to keep screen active on web
-    // Trigger a minor UI update every 25 seconds to prevent screen sleep
+    if (!web.isWeb) {
+      return;
+    }
+
     _screenKeepAliveTimer = Timer.periodic(const Duration(seconds: 25), (timer) {
       if (mounted && _currentView == ViewType.day) {
-        // Multiple fallback methods to keep screen active
         try {
-          // Method 1: Trigger very subtle animation
           _ringAnimationController.forward(from: 0.999);
-          
-          // Method 2: Create invisible video element to prevent sleep
-          js.context.callMethod('eval', ['''
+
+          web.evalJs('''
             if (!window.keepAliveVideo) {
               var video = document.createElement('video');
               video.src = 'data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAACAEFhdGEBAQAAAREAAAABAAAARAAAaGQAABCkAAAQpAAAAAADCOxPcAAAwBQAAAe8AAAABAAAAAEACo/UgEwEAABGaBgn40AE=';
@@ -1832,7 +1770,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               video.play().catch(function(e) { console.log('Video play failed:', e); });
               window.keepAliveVideo = video;
             }
-          ''']);
+          ''');
         } catch (e) {
           print('Keep-alive fallback failed: $e');
         }
@@ -1844,19 +1782,22 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   void _stopScreenKeepAlive() {
     _screenKeepAliveTimer?.cancel();
     _screenKeepAliveTimer = null;
-    
-    // Clean up video element
+
+    if (!web.isWeb) {
+      return;
+    }
+
     try {
-      js.context.callMethod('eval', ['''
+      web.evalJs('''
         if (window.keepAliveVideo) {
           window.keepAliveVideo.remove();
           window.keepAliveVideo = null;
         }
-      ''']);
+      ''');
     } catch (e) {
       print('Failed to clean up keep-alive video: $e');
     }
-    
+
     print('Screen keep-alive timer stopped');
   }
 
@@ -3022,17 +2963,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildMobileDashboard(int todayIndex, int currentScore, int maxScore, double percentage) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        _buildTodaysFocusSection(todayIndex),
+    final children = <Widget>[
+      _buildTodaysFocusSection(todayIndex),
+      const SizedBox(height: 24),
+      if (isIOS) ...[
+        _buildYourProgressSection(dayIndex: todayIndex, currentScore: currentScore),
         const SizedBox(height: 24),
         const WeeklyMomentumWidget(),
+      ] else ...[
+        const WeeklyMomentumWidget(),
         const SizedBox(height: 24),
-        _buildYourProgressSection(todayIndex, currentScore),
-        const SizedBox(height: 24),
-        const ContestsDashboardWidget(),
+        _buildYourProgressSection(dayIndex: todayIndex, currentScore: currentScore),
       ],
+    ];
+
+    return ListView(
+      padding: EdgeInsets.fromLTRB(16, isIOS ? 32 : 16, 16, isIOS ? 72 : 32),
+      children: children,
     );
   }
 
@@ -3059,7 +3006,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Expanded(
             flex: 3,
             child: SingleChildScrollView(
-              child: _buildYourProgressSection(todayIndex, currentScore),
+              child: _buildYourProgressSection(dayIndex: todayIndex, currentScore: currentScore),
             ),
           ),
         ],
@@ -3324,7 +3271,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Row(
             children: [
               Text(
-                '${AuthService.currentUser?.name.toUpperCase() ?? 'TODAY'}\'S PERFORMANCE',
+                '${(AuthService.currentUser?.name.split(' ').first ?? AuthService.currentUser?.name ?? 'TODAY').toUpperCase()}\'S PERFORMANCE',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -3488,14 +3435,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ),
           // Time Distribution Pie Chart
           if (_timelineEntries.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: isIOS ? 20 : 16),
             Container(
               width: double.infinity,
               height: 1,
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isIOS ? 20 : 16),
             _buildInlinePieChart(),
+            SizedBox(height: isIOS ? 8 : 0),
           ],
         ],
       ),
@@ -3568,8 +3516,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         Center(
           child: CategoryPieChart(
             entries: _timelineEntries,
-            size: 140,
-            centerSpaceRadius: 35,
+            size: isIOS ? 110 : 140,
+            centerSpaceRadius: isIOS ? 28 : 35,
             showLegend: false,
             onTap: () {
               Navigator.push(
@@ -4401,7 +4349,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  Widget _buildYourProgressSection(int dayIndex, int currentScore) {
+  Widget _buildYourProgressSection({required int dayIndex, required int currentScore}) {
     return Container(
       padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
       child: Column(
@@ -4552,17 +4500,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return ValueListenableBuilder<double>(
       valueListenable: _compoundProgressNotifier,
       builder: (context, progress, child) {
-        List<String> compoundHabitIds = _compoundingHabits.toList();
         int completedCount = 0;
         int totalCount = 0;
         
-        for (String habitId in compoundHabitIds) {
-          if (!_isHabitDisabledById(habitId, dayIndex)) {
-            totalCount++;
-            HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
-              completedCount++;
-            }
+        for (final entry in _timelineEntries) {
+          if (!entry.isCompound) {
+            continue;
+          }
+          if (_isHabitDisabledById(entry.habitId, dayIndex)) {
+            continue;
+          }
+          totalCount++;
+          if (_isCompletedStatus(entry.completionStatus)) {
+            completedCount++;
           }
         }
         
@@ -4685,15 +4635,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   String _getCompoundHabitsNames(int dayIndex, int completedCount) {
     List<String> completedHabits = [];
-    List<String> compoundHabitIds = _compoundingHabits.toList();
     
-    for (String habitId in compoundHabitIds) {
-      final habitTitle = _getHabitTitle(habitId);
-      if (!_isHabitDisabled(habitTitle, dayIndex)) {
-        HabitState state = _trackingData[habitTitle]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
-          completedHabits.add(habitTitle);
-        }
+    for (final entry in _timelineEntries) {
+      if (!entry.isCompound) {
+        continue;
+      }
+      if (_isHabitDisabledById(entry.habitId, dayIndex)) {
+        continue;
+      }
+      if (_isCompletedStatus(entry.completionStatus)) {
+        completedHabits.add(_getHabitTitle(entry.habitId));
       }
     }
     
@@ -6736,38 +6687,37 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
   // Compounding Habits Chart Widget
   Widget _buildCompoundingHabitsChart(int dayIndex) {
-    List<String> compoundingHabitIdsList = _compoundingHabits.toList();
     int completedCount = 0;
     int totalCount = 0;
     
-    Map<String, double> categoryProgress = {};
+    Map<String, int> categoryTotals = {};
+    Map<String, int> categoryCompleted = {};
     
-    // Calculate progress for each category dynamically
-    for (String category in _categoryList) {
-      List<String> categoryHabitIds = _categories[category] ?? [];
-      List<String> compoundingInCategory = categoryHabitIds.where((habitId) => _compoundingHabits.contains(habitId)).toList();
-      
-      if (compoundingInCategory.isNotEmpty) {
-        int categoryCompleted = 0;
-        int categoryTotal = compoundingInCategory.length;
-        
-        bool isWeekend = dayIndex == 5 || dayIndex == 6;
-        
-        for (String habitId in compoundingInCategory) {
-          bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
-          
-          if (!isDisabled) {
-            totalCount++;
-            HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
-              completedCount++;
-              categoryCompleted++;
-            }
-          }
-        }
-        
-        categoryProgress[category] = categoryTotal > 0 ? categoryCompleted / categoryTotal : 0.0;
+    for (final entry in _timelineEntries) {
+      if (!entry.isCompound) {
+        continue;
       }
+      if (_isHabitDisabledById(entry.habitId, dayIndex)) {
+        continue;
+      }
+      totalCount++;
+      if (_isCompletedStatus(entry.completionStatus)) {
+        completedCount++;
+      }
+      final category = _habitsMap[entry.habitId]?.category;
+      if (category != null && category.isNotEmpty) {
+        categoryTotals[category] = (categoryTotals[category] ?? 0) + 1;
+        if (_isCompletedStatus(entry.completionStatus)) {
+          categoryCompleted[category] = (categoryCompleted[category] ?? 0) + 1;
+        }
+      }
+    }
+    
+    Map<String, double> categoryProgress = {};
+    for (final entry in categoryTotals.entries) {
+      final total = entry.value;
+      final completed = categoryCompleted[entry.key] ?? 0;
+      categoryProgress[entry.key] = total > 0 ? completed / total : 0.0;
     }
     
     double overallProgress = totalCount > 0 ? completedCount / totalCount : 0.0;

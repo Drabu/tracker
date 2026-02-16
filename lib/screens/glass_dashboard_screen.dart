@@ -139,6 +139,7 @@ class _GlassDashboardScreenState extends State<GlassDashboardScreen> {
     return Scaffold(
       body: AmbientBackground(
         child: SafeArea(
+          minimum: const EdgeInsets.only(top: 32),
           child: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(
@@ -169,7 +170,7 @@ class _GlassDashboardScreenState extends State<GlassDashboardScreen> {
   
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
       child: Row(
         children: [
           Text(
@@ -224,6 +225,11 @@ class _GlassDashboardScreenState extends State<GlassDashboardScreen> {
                   habitsMap: _habitsMap,
                 ),
                 const SizedBox(height: 16),
+                GlassDailyPointsCard(
+                  earnedPoints: _earnedPoints,
+                  totalPoints: _totalPoints,
+                ),
+                const SizedBox(height: 16),
                 _buildFocusModeCard(),
                 const SizedBox(height: 16),
                 _buildScheduleCard(),
@@ -256,11 +262,6 @@ class _GlassDashboardScreenState extends State<GlassDashboardScreen> {
                 const GlassContestsCard(),
                 const SizedBox(height: 16),
                 _buildQuickActions(),
-                const SizedBox(height: 16),
-                GlassDailyPointsCard(
-                  earnedPoints: _earnedPoints,
-                  totalPoints: _totalPoints,
-                ),
                 const SizedBox(height: 16),
                 _buildCompoundHabitsCard(),
               ],
@@ -315,14 +316,14 @@ class _GlassDashboardScreenState extends State<GlassDashboardScreen> {
           const SizedBox(height: 16),
           Row(
             children: [
-              Expanded(child: _buildFocusModeCard()),
-              const SizedBox(width: 16),
               Expanded(
                 child: GlassDailyPointsCard(
                   earnedPoints: _earnedPoints,
                   totalPoints: _totalPoints,
                 ),
               ),
+              const SizedBox(width: 16),
+              Expanded(child: _buildFocusModeCard()),
             ],
           ),
         ],
@@ -349,17 +350,17 @@ class _GlassDashboardScreenState extends State<GlassDashboardScreen> {
           habitsMap: _habitsMap,
         ),
         const SizedBox(height: 16),
-        GlassCategoryProgress(
-          entries: _timelineEntries,
-          habitsMap: _habitsMap,
-        ),
+        _buildFocusModeCard(),
         const SizedBox(height: 16),
         GlassDailyPointsCard(
           earnedPoints: _earnedPoints,
           totalPoints: _totalPoints,
         ),
         const SizedBox(height: 16),
-        _buildFocusModeCard(),
+        GlassCategoryProgress(
+          entries: _timelineEntries,
+          habitsMap: _habitsMap,
+        ),
       ]),
     );
   }

@@ -41,6 +41,7 @@ class _EventSidePanelState extends State<EventSidePanel> {
   late int _endHour;
   late int _endMinute;
   late Habit? _selectedHabit;
+  late bool _isCompound;
   late TextEditingController _notesController;
   
   final FocusNode _panelFocusNode = FocusNode();
@@ -62,6 +63,7 @@ class _EventSidePanelState extends State<EventSidePanel> {
     _endHour = entry.endMinutes ~/ 60;
     _endMinute = entry.endMinutes % 60;
     _selectedHabit = widget.habitsMap[entry.habitId];
+    _isCompound = entry.isCompound;
     _notesController = TextEditingController(text: entry.notes ?? '');
   }
 
@@ -117,6 +119,7 @@ class _EventSidePanelState extends State<EventSidePanel> {
       durationMinutes: _duration,
       points: _points,
       notes: _notesController.text.isEmpty ? null : _notesController.text,
+      isCompound: _isCompound,
     );
     
     widget.onSave(updatedEntry);
@@ -186,6 +189,8 @@ class _EventSidePanelState extends State<EventSidePanel> {
                     _buildDateTimeRow(),
                     _buildDivider(),
                     _buildPointsRow(),
+                    _buildDivider(),
+                    _buildCompoundRow(),
                     _buildDivider(),
                     _buildNotesRow(),
                     _buildDivider(),
@@ -519,6 +524,41 @@ class _EventSidePanelState extends State<EventSidePanel> {
               fontSize: 12,
               color: Colors.white.withValues(alpha: 0.35),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompoundRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.auto_graph,
+            size: 18,
+            color: Color(0xFFFF9F0A),
+          ),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Compound habit',
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.white,
+              ),
+            ),
+          ),
+          Switch(
+            value: _isCompound,
+            activeColor: const Color(0xFFFF9F0A),
+            onChanged: (value) {
+              setState(() {
+                _isCompound = value;
+              });
+              HapticFeedback.selectionClick();
+            },
           ),
         ],
       ),

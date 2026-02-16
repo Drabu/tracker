@@ -157,11 +157,14 @@ class _ContestScreenState extends State<ContestScreen> {
       if (contest.participants.isNotEmpty) {
         final sorted = List<ContestParticipant>.from(contest.participants)
           ..sort((a, b) => b.totalScore.compareTo(a.totalScore));
-        final winner = sorted.first;
-        winners.add({
-          'contest': contest,
-          'winner': winner,
-        });
+        final topScore = sorted.first.totalScore;
+        final tiedCount = sorted.where((p) => p.totalScore == topScore).length;
+        if (tiedCount == 1) {
+          winners.add({
+            'contest': contest,
+            'winner': sorted.first,
+          });
+        }
       }
     }
 
@@ -324,6 +327,7 @@ class _ContestScreenState extends State<ContestScreen> {
       ),
     );
   }
+
 }
 
 class ContestCard extends StatelessWidget {

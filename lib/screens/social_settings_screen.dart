@@ -1,6 +1,8 @@
 import 'dart:async';
-import 'dart:html' as html;
+
 import 'package:flutter/material.dart';
+
+import '../platform/web_adapter.dart' as web;
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -149,7 +151,7 @@ class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
     setState(() => _isConnectingAlexa = true);
 
     const clientId = 'amzn1.application-oa2-client.2f4b358af3fd4d298e64ee2f45806b96';
-    const redirectUri = 'https://app.rythmn.online/alexa-callback.html';
+    const redirectUri = 'https://app.rythmn.fit/alexa-callback.html';
     const scope = 'alexa::alerts:reminders:skill:readwrite';
 
     // Set the pending user ID for the OAuth callback
@@ -248,7 +250,9 @@ class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
   /// Store user ID in localStorage for the web callback page
   void _storeUserIdForOAuth(String userId) {
     try {
-      html.window.localStorage['alexa_oauth_user_id'] = userId;
+      if (web.isWeb) {
+        web.setLocalStorageItem('alexa_oauth_user_id', userId);
+      }
     } catch (e) {
       debugPrint('Failed to store user ID in localStorage: $e');
     }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
@@ -6,9 +7,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 
 class AuthService {
-  static const String _prodUrl = 'https://api.rythmn.online/api';
-  static const String _devUrl = 'http://localhost:8080/api';
-  static String get _baseUrl => kReleaseMode ? _prodUrl : _devUrl;
+  static const String _prodUrl = 'https://api.rythmn.fit/api';
+
+  static const String _apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: _prodUrl,
+  );
+
+  static String get _baseUrl => _apiBaseUrl;
+
+  static const String _iosClientId = String.fromEnvironment(
+    'IOS_GOOGLE_CLIENT_ID',
+    defaultValue: '',
+  );
 
   static const String _userKey = 'current_user';
   static const String _tokenKey = 'auth_token';
@@ -17,7 +28,7 @@ class AuthService {
     scopes: ['email', 'profile'],
     clientId: kIsWeb
         ? '146630121520-8ednqm0gqmr0ngnfvaa3crhvmjijruni.apps.googleusercontent.com'
-        : null,
+        : (_iosClientId.isEmpty ? null : _iosClientId),
   );
 
   static AppUser? _currentUser;
@@ -45,6 +56,12 @@ class AuthService {
   }
 
   static Future<AppUser?> signInWithGoogle() async {
+    if (!kIsWeb && _iosClientId.isEmpty) {
+      throw StateError(
+        'Google Sign-In iOS not configured. Provide --dart-define=IOS_GOOGLE_CLIENT_ID=... and add the REVERSED_CLIENT_ID URL scheme in ios/Runner/Info.plist.',
+      );
+    }
+
     try {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return null;
@@ -78,7 +95,9 @@ class AuthService {
         return _currentUser;
       }
 
-      throw Exception('Failed to authenticate with server');
+      throw Exception(
+        'Server auth failed (${response.statusCode}): ${response.body}',
+      );
     } catch (e) {
       print('Google Sign-In error: $e');
       rethrow;

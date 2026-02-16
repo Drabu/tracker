@@ -96,6 +96,7 @@ class Event {
   final int points;
   final CompletionStatus completionStatus;
   final String? notes;
+  final bool isCompound;
 
   Event({
     required this.id,
@@ -105,6 +106,7 @@ class Event {
     required this.points,
     this.completionStatus = CompletionStatus.none,
     this.notes,
+    this.isCompound = false,
   });
 
   factory Event.fromJson(Map<String, dynamic> json) {
@@ -118,6 +120,7 @@ class Event {
       points: json['points'] ?? 0,
       completionStatus: _parseCompletionStatus(json['completionStatus']),
       notes: json['notes'],
+      isCompound: json['isCompound'] == true,
     );
   }
 
@@ -170,6 +173,7 @@ class Event {
       'points': points,
       'completionStatus': _completionStatusToString(completionStatus),
       'notes': notes,
+      'isCompound': isCompound,
     };
   }
 
@@ -181,6 +185,7 @@ class Event {
     int? points,
     CompletionStatus? completionStatus,
     String? notes,
+    bool? isCompound,
   }) {
     return Event(
       id: id ?? this.id,
@@ -190,6 +195,7 @@ class Event {
       points: points ?? this.points,
       completionStatus: completionStatus ?? this.completionStatus,
       notes: notes ?? this.notes,
+      isCompound: isCompound ?? this.isCompound,
     );
   }
 

@@ -1,5 +1,5 @@
 # Build stage - compile Flutter web app
-FROM --platform=linux/amd64 ghcr.io/cirruslabs/flutter:stable AS build
+FROM ghcr.io/cirruslabs/flutter:stable AS build
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN flutter pub get
 RUN flutter build web --release
 
 # Production stage - serve static files with nginx
-FROM --platform=linux/amd64 nginx:alpine
+FROM nginx:alpine
 
 COPY --from=build /app/build/web /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf.template

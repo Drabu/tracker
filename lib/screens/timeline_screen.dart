@@ -139,9 +139,10 @@ class _TimelineScreenState extends State<TimelineScreen> {
           startMinutes: e.startMinutes,
           durationMinutes: e.durationMinutes,
           points: e.points,
+          isCompound: e.isCompound,
         );
       }).toList();
-      
+
       await ApiService.saveTimeline(
         userId: widget.userId,
         date: _formatDate(targetDate),
@@ -242,6 +243,8 @@ class _TimelineScreenState extends State<TimelineScreen> {
       endMinute = 55;
     }
 
+    bool isCompound = false;
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -323,6 +326,21 @@ class _TimelineScreenState extends State<TimelineScreen> {
                       color: _remainingPoints - points < 0 ? Colors.red : Colors.grey,
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: isCompound,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isCompound = value ?? false;
+                          });
+                        },
+                        activeColor: const Color(0xFFFF9F0A),
+                      ),
+                      const Text('Compound habit'),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -342,6 +360,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                             startMinutes: entryStartMinutes,
                             durationMinutes: duration,
                             points: points,
+                            isCompound: isCompound,
                           ));
                           _entries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
                         });
@@ -469,6 +488,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
       startMinutes: startMinutes,
       durationMinutes: duration,
       points: 0,
+      isCompound: false,
     );
     
     setState(() {
@@ -481,6 +501,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
   void _addEntryWithTimeRange(Habit habit, int startMinutes, int endMinutes) {
     final duration = endMinutes - startMinutes;
     int points = 0;
+    bool isCompound = false;
     
     showDialog(
       context: context,
@@ -544,6 +565,21 @@ class _TimelineScreenState extends State<TimelineScreen> {
                     color: _remainingPoints - points < 0 ? Colors.red : Colors.grey,
                   ),
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: isCompound,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          isCompound = value ?? false;
+                        });
+                      },
+                      activeColor: const Color(0xFFFF9F0A),
+                    ),
+                    const Text('Compound habit'),
+                  ],
+                ),
               ],
             ),
             actions: [
@@ -561,6 +597,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
                             startMinutes: startMinutes,
                             durationMinutes: duration,
                             points: points,
+                            isCompound: isCompound,
                           ));
                           _entries.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
                         });
@@ -643,6 +680,8 @@ class _TimelineScreenState extends State<TimelineScreen> {
   }
 
   Widget _buildAppBar() {
+    final canPop = Navigator.of(context).canPop();
+
     return Container(
       height: 56 + MediaQuery.of(context).padding.top,
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
@@ -657,7 +696,15 @@ class _TimelineScreenState extends State<TimelineScreen> {
       ),
       child: Row(
         children: [
-          const SizedBox(width: 16),
+          if (canPop)
+            IconButton(
+              icon: const Icon(Icons.arrow_back),
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+            )
+          else
+            const SizedBox(width: 16),
+          if (canPop) const SizedBox(width: 4),
           Text(
             'Timeline',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(

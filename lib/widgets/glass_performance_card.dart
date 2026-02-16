@@ -47,7 +47,7 @@ class GlassPerformanceCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  "${userName.toUpperCase()}'S PERFORMANCE",
+                  "${userName.split(' ').first.toUpperCase()}'S PERFORMANCE",
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

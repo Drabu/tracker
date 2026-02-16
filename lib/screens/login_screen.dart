@@ -119,11 +119,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const Icon(Icons.g_mobiledata, size: 24),
                             ),
                             const SizedBox(width: 12),
-                            const Text(
-                              'Sign in with Google',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
+                            const Flexible(
+                              child: Text(
+                                'Sign in with Google',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ],

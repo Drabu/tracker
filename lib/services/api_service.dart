@@ -1,12 +1,16 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
 class ApiService {
-  static const String _prodUrl = 'https://api.rythmn.online/api';
-  static const String _devUrl = 'http://localhost:8080/api';
-  static String get _baseUrl => kReleaseMode ? _prodUrl : _devUrl;
+  static const String _prodUrl = 'https://api.rythmn.fit/api';
+
+  static const String _apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: _prodUrl,
+  );
+
+  static String get _baseUrl => _apiBaseUrl;
 
   static Future<List<Habit>> getHabits() async {
     final response = await http.get(Uri.parse('$_baseUrl/habits'));

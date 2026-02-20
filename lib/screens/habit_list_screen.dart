@@ -15,7 +15,7 @@ class HabitListScreen extends StatefulWidget {
 class _HabitListScreenState extends State<HabitListScreen> {
   String get _currentUserId => AuthService.currentUser?.id ?? '';
   List<Habit> _habits = [];
-  Set<String> _compoundHabitIds = {};
+  List<Category> _availableCategories = [];
   bool _isLoading = true;
   String? _error;
   String? _selectedCategory; // null means "All"
@@ -35,7 +35,18 @@ class _HabitListScreenState extends State<HabitListScreen> {
   void initState() {
     super.initState();
     _loadHabits();
-    _loadCompoundHabits();
+    _loadAvailableCategories();
+  }
+
+  Future<void> _loadAvailableCategories() async {
+    try {
+      final categories = await ApiService.getCategoriesForUser(_currentUserId);
+      setState(() {
+        _availableCategories = categories;
+      });
+    } catch (e) {
+      // Categories are optional, habit list still works
+    }
   }
 
   Future<void> _loadHabits() async {
@@ -58,168 +69,61 @@ class _HabitListScreenState extends State<HabitListScreen> {
     }
   }
 
-  Future<void> _loadCompoundHabits() async {
-    try {
-      final compoundIds = await ApiService.getUserCompoundHabits(_currentUserId);
-      setState(() {
-        _compoundHabitIds = compoundIds.toSet();
-      });
-    } catch (e) {
-      // Ignore errors, compound habits are optional
-    }
-  }
-
-  Future<void> _toggleCompound(String habitId, bool isCompound) async {
-    try {
-      await ApiService.setUserCompoundHabit(_currentUserId, habitId, isCompound);
-      setState(() {
-        if (isCompound) {
-          _compoundHabitIds.add(habitId);
-        } else {
-          _compoundHabitIds.remove(habitId);
-        }
-      });
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
-  }
-
   void _showAddHabitDialog() {
     final titleController = TextEditingController();
-    final categoryController = TextEditingController();
     final descriptionController = TextEditingController();
     final iconController = TextEditingController();
+    String? selectedCategoryName;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Habit'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'Title'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: categoryController,
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: iconController,
-                decoration: const InputDecoration(labelText: 'Icon (emoji)'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleController.text.isEmpty || categoryController.text.isEmpty) {
-                return;
-              }
-              try {
-                await ApiService.createHabit(
-                  title: titleController.text,
-                  category: categoryController.text,
-                  icon: iconController.text,
-                  description: descriptionController.text,
-                );
-                if (context.mounted) Navigator.pop(context);
-                _loadHabits();
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showEditHabitDialog(Habit habit) {
-    final titleController = TextEditingController(text: habit.title);
-    final categoryController = TextEditingController(text: habit.category);
-    final descriptionController = TextEditingController(text: habit.description);
-    final iconController = TextEditingController(text: habit.icon);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Habit'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: titleController,
-                decoration: const InputDecoration(labelText: 'Title'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: categoryController,
-                decoration: const InputDecoration(labelText: 'Category'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: iconController,
-                decoration: const InputDecoration(labelText: 'Icon (emoji)'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(labelText: 'Description'),
-                maxLines: 2,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Delete Habit?'),
-                  content: Text('Are you sure you want to delete "${habit.title}"?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      style: TextButton.styleFrom(foregroundColor: Colors.red),
-                      child: const Text('Delete'),
-                    ),
-                  ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add New Habit'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Title'),
                 ),
-              );
-              if (confirm == true) {
+                const SizedBox(height: 8),
+                _buildCategoryDropdown(
+                  selectedCategoryName,
+                  (value) => setDialogState(() => selectedCategoryName = value),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: iconController,
+                  decoration: const InputDecoration(labelText: 'Icon (emoji)'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (titleController.text.isEmpty || selectedCategoryName == null) {
+                  return;
+                }
                 try {
-                  await ApiService.deleteHabit(habit.id);
+                  await ApiService.createHabit(
+                    title: titleController.text,
+                    category: selectedCategoryName!,
+                    icon: iconController.text,
+                    description: descriptionController.text,
+                  );
                   if (context.mounted) Navigator.pop(context);
                   _loadHabits();
                 } catch (e) {
@@ -229,26 +133,97 @@ class _HabitListScreenState extends State<HabitListScreen> {
                     );
                   }
                 }
-              }
-            },
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryDropdown(String? selectedValue, ValueChanged<String?> onChanged) {
+    final platformCats = _availableCategories.where((c) => c.type == 'platform').toList();
+    final userCats = _availableCategories.where((c) => c.type == 'user').toList();
+
+    final items = <DropdownMenuItem<String>>[];
+
+    if (platformCats.isNotEmpty) {
+      items.add(const DropdownMenuItem<String>(
+        enabled: false,
+        value: null,
+        child: Text('--- Platform ---', style: TextStyle(color: Colors.white38, fontSize: 12)),
+      ));
+      for (final cat in platformCats) {
+        items.add(DropdownMenuItem<String>(value: cat.name, child: Text(cat.name)));
+      }
+    }
+
+    if (userCats.isNotEmpty) {
+      items.add(const DropdownMenuItem<String>(
+        enabled: false,
+        value: null,
+        child: Text('--- Personal ---', style: TextStyle(color: Colors.white38, fontSize: 12)),
+      ));
+      for (final cat in userCats) {
+        items.add(DropdownMenuItem<String>(value: cat.name, child: Text(cat.name)));
+      }
+    }
+
+    items.add(const DropdownMenuItem<String>(
+      value: '__add_new__',
+      child: Text('+ Add new category...', style: TextStyle(color: Color(0xFF58A6FF))),
+    ));
+
+    return DropdownButtonFormField<String>(
+      value: selectedValue,
+      decoration: const InputDecoration(labelText: 'Category'),
+      items: items,
+      onChanged: (value) {
+        if (value == '__add_new__') {
+          _showNewCategoryDialog((newName) {
+            onChanged(newName);
+          });
+        } else {
+          onChanged(value);
+        }
+      },
+    );
+  }
+
+  void _showNewCategoryDialog(ValueChanged<String> onCreated) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        title: const Text('New Personal Category'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Category name',
+            border: OutlineInputBorder(),
           ),
+        ),
+        actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
+              if (controller.text.trim().isEmpty) return;
               try {
-                await ApiService.updateHabit(habit.id, {
-                  'title': titleController.text,
-                  'category': categoryController.text,
-                  'icon': iconController.text,
-                  'description': descriptionController.text,
+                final cat = await ApiService.createUserCategory(
+                  controller.text.trim(),
+                  _currentUserId,
+                );
+                setState(() {
+                  _availableCategories.add(cat);
                 });
                 if (context.mounted) Navigator.pop(context);
-                _loadHabits();
+                onCreated(cat.name);
               } catch (e) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -257,9 +232,122 @@ class _HabitListScreenState extends State<HabitListScreen> {
                 }
               }
             },
-            child: const Text('Save'),
+            child: const Text('Create'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditHabitDialog(Habit habit) {
+    final titleController = TextEditingController(text: habit.title);
+    final descriptionController = TextEditingController(text: habit.description);
+    final iconController = TextEditingController(text: habit.icon);
+    String? selectedCategoryName = habit.category;
+
+    // If habit's current category isn't in the available list, keep it as selected anyway
+    final knownNames = _availableCategories.map((c) => c.name).toSet();
+    if (!knownNames.contains(selectedCategoryName)) {
+      selectedCategoryName = null;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Habit'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleController,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
+                const SizedBox(height: 8),
+                _buildCategoryDropdown(
+                  selectedCategoryName,
+                  (value) => setDialogState(() => selectedCategoryName = value),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: iconController,
+                  decoration: const InputDecoration(labelText: 'Icon (emoji)'),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Delete Habit?'),
+                    content: Text('Are you sure you want to delete "${habit.title}"?'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: TextButton.styleFrom(foregroundColor: Colors.red),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  try {
+                    await ApiService.deleteHabit(habit.id);
+                    if (context.mounted) Navigator.pop(context);
+                    _loadHabits();
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error: $e')),
+                      );
+                    }
+                  }
+                }
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                try {
+                  await ApiService.updateHabit(habit.id, {
+                    'title': titleController.text,
+                    'category': selectedCategoryName ?? habit.category,
+                    'icon': iconController.text,
+                    'description': descriptionController.text,
+                  });
+                  if (context.mounted) Navigator.pop(context);
+                  _loadHabits();
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -377,44 +465,13 @@ class _HabitListScreenState extends State<HabitListScreen> {
                               return Card(
                                 key: ValueKey(habit.id),
                                 child: ListTile(
-                                  leading: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Checkbox(
-                                        value: _compoundHabitIds.contains(habit.id),
-                                        onChanged: (value) => _toggleCompound(habit.id, value ?? false),
-                                        activeColor: const Color(0xFFFF9F0A),
-                                      ),
-                                      if (habit.icon.isNotEmpty)
-                                        Text(
+                                  leading: habit.icon.isNotEmpty
+                                      ? Text(
                                           habit.icon,
                                           style: const TextStyle(fontSize: 24),
                                         )
-                                      else
-                                        const Icon(Icons.check_circle_outline),
-                                    ],
-                                  ),
-                                  title: Row(
-                                    children: [
-                                      Expanded(child: Text(habit.title)),
-                                      if (_compoundHabitIds.contains(habit.id))
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFFF9F0A).withValues(alpha: 0.2),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: const Text(
-                                            'COMPOUND',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFFFF9F0A),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
+                                      : const Icon(Icons.check_circle_outline),
+                                  title: Text(habit.title),
                                   subtitle: habit.description.isNotEmpty
                                       ? Text(habit.description)
                                       : null,

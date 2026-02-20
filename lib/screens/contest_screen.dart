@@ -361,68 +361,149 @@ class _ContestCardState extends State<ContestCard> {
   Future<void> _showRenameDialog() async {
     final nameController = TextEditingController(text: contest.name);
     final descController = TextEditingController(text: contest.description);
+    DateTime startDate = DateTime.parse(contest.startDate);
+    DateTime endDate = DateTime.parse(contest.endDate);
+
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: const Color(0xFF161B22),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Rename Contest', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Name',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  filled: true,
-                  fillColor: const Color(0xFF0D1117),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> pickDate(bool isStart) async {
+            final picked = await showDatePicker(
+              context: context,
+              initialDate: isStart ? startDate : endDate,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now().add(const Duration(days: 365)),
+              builder: (context, child) {
+                return Theme(
+                  data: ThemeData.dark().copyWith(
+                    colorScheme: const ColorScheme.dark(
+                      primary: Color(0xFF58A6FF),
+                      surface: Color(0xFF161B22),
+                    ),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            if (picked != null) {
+              setDialogState(() {
+                if (isStart) {
+                  startDate = picked;
+                  if (endDate.isBefore(startDate)) {
+                    endDate = startDate.add(const Duration(days: 1));
+                  }
+                } else {
+                  endDate = picked;
+                }
+              });
+            }
+          }
+
+          Widget buildDateSelector(String label, DateTime date, VoidCallback onTap) {
+            return InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D1117),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today, size: 16, color: Colors.white.withOpacity(0.7)),
+                        const SizedBox(width: 8),
+                        Text('${date.day}/${date.month}/${date.year}', style: const TextStyle(color: Colors.white, fontSize: 14)),
+                      ],
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descController,
-                style: const TextStyle(color: Colors.white),
-                maxLines: 2,
-                decoration: InputDecoration(
-                  labelText: 'Description',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
-                  filled: true,
-                  fillColor: const Color(0xFF0D1117),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+            );
+          }
+
+          return Dialog(
+            backgroundColor: const Color(0xFF161B22),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF238636), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                    child: const Text('Save', style: TextStyle(color: Colors.white)),
+                  const Text('Edit Contest', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: nameController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Name',
+                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                      filled: true,
+                      fillColor: const Color(0xFF0D1117),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: descController,
+                    style: const TextStyle(color: Colors.white),
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'Description',
+                      labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                      filled: true,
+                      fillColor: const Color(0xFF0D1117),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(child: buildDateSelector('Start', startDate, () => pickDate(true))),
+                      const SizedBox(width: 16),
+                      Expanded(child: buildDateSelector('End', endDate, () => pickDate(false))),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                      const SizedBox(width: 12),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF238636), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                        child: const Text('Save', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
     if (result == true && mounted) {
       setState(() => _isLoading = true);
       try {
-        await ApiService.updateContest(contest.id, name: nameController.text.trim(), description: descController.text.trim());
+        await ApiService.updateContest(
+          contest.id,
+          name: nameController.text.trim(),
+          description: descController.text.trim(),
+          startDate: startDate.toIso8601String().split('T')[0],
+          endDate: DateTime(endDate.year, endDate.month, endDate.day, 23, 59, 59).toIso8601String(),
+        );
         widget.onRefresh();
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
@@ -551,11 +632,11 @@ class _ContestCardState extends State<ContestCard> {
                         icon: Icon(Icons.more_vert, color: Colors.white.withOpacity(0.5), size: 20),
                         color: const Color(0xFF21262D),
                         onSelected: (value) {
-                          if (value == 'rename') _showRenameDialog();
+                          if (value == 'edit') _showRenameDialog();
                           if (value == 'delete') _confirmDeleteContest();
                         },
                         itemBuilder: (context) => [
-                          const PopupMenuItem(value: 'rename', child: Text('Rename Contest', style: TextStyle(color: Colors.white))),
+                          const PopupMenuItem(value: 'edit', child: Text('Edit Contest', style: TextStyle(color: Colors.white))),
                           const PopupMenuItem(value: 'delete', child: Text('Delete Contest', style: TextStyle(color: Colors.redAccent))),
                         ],
                       )
@@ -1061,7 +1142,7 @@ class _CreateContestDialogState extends State<CreateContestDialog> {
       backgroundColor: const Color(0xFF161B22),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.all(24),
         child: Form(
           key: _formKey,

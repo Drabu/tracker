@@ -19,6 +19,7 @@ import 'screens/habit_list_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/contest_screen.dart';
 import 'screens/contest_invite_screen.dart';
+import 'screens/admin_categories_screen.dart';
 import 'screens/social_settings_screen.dart';
 import 'screens/glass_dashboard_screen.dart';
 import 'models/models.dart';
@@ -118,7 +119,7 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'Daily Tracker',
+      title: 'Rythmn',
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         scrollbars: false,
       ),
@@ -712,6 +713,24 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     color: Colors.blue,
                     onTap: _playAirplaneCallSound,
                   ),
+                  if (AuthService.isAdmin)
+                    SidebarItem(
+                      icon: Icons.category,
+                      label: 'Categories',
+                      color: const Color(0xFFAF52DE),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          PageRouteBuilder(
+                            pageBuilder: (context, animation, secondaryAnimation) =>
+                                const AdminCategoriesScreen(),
+                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                              return FadeTransition(opacity: animation, child: child);
+                            },
+                          ),
+                        );
+                      },
+                    ),
                   SidebarItem(
                     icon: Icons.settings,
                     label: 'Settings',
@@ -2122,12 +2141,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       // Load habits, categories, and compound habits in parallel
       final results = await Future.wait([
         ApiService.getHabits(),
-        ApiService.getCategories(),
+        ApiService.getCategoriesForUser(_currentUserId),
         ApiService.getUserCompoundHabits(_currentUserId),
       ]);
-      
+
       final habits = results[0] as List<Habit>;
-      final categories = results[1] as List<String>;
+      final categoryObjects = results[1] as List<Category>;
+      final categories = categoryObjects.map((c) => c.name).toList();
       final compoundHabitIds = results[2] as List<String>;
       
       _habitsMap = {for (var h in habits) h.id: h};
@@ -3150,7 +3170,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Row(
             children: [
               Text(
-                'ACTIVITY RINGS',
+                'RYTHMN',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,

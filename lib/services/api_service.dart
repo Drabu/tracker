@@ -30,6 +30,76 @@ class ApiService {
     throw Exception('Failed to load categories');
   }
 
+  static Future<List<Category>> getCategoriesForUser(String userId) async {
+    final response = await http.get(Uri.parse('$_baseUrl/categories?userId=$userId'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => Category.fromJson(e)).toList();
+    }
+    throw Exception('Failed to load categories');
+  }
+
+  static Future<List<Category>> getPlatformCategories() async {
+    final response = await http.get(Uri.parse('$_baseUrl/categories/platform'));
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body);
+      return data.map((e) => Category.fromJson(e)).toList();
+    }
+    throw Exception('Failed to load platform categories');
+  }
+
+  static Future<Category> createPlatformCategory(String name, String email) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/categories/platform'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name, 'email': email}),
+    );
+    if (response.statusCode == 201) {
+      return Category.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create platform category');
+  }
+
+  static Future<Category> updatePlatformCategory(String id, String name, String email) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/categories/platform/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name, 'email': email}),
+    );
+    if (response.statusCode == 200) {
+      return Category.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to update platform category');
+  }
+
+  static Future<void> deletePlatformCategory(String id, String email) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/categories/platform/$id?email=${Uri.encodeComponent(email)}'),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete platform category');
+    }
+  }
+
+  static Future<Category> createUserCategory(String name, String userId) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/categories/user'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name, 'userId': userId}),
+    );
+    if (response.statusCode == 201) {
+      return Category.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to create user category');
+  }
+
+  static Future<void> deleteUserCategory(String id) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/categories/user/$id'));
+    if (response.statusCode != 204) {
+      throw Exception('Failed to delete user category');
+    }
+  }
+
   static Future<Habit> createHabit({
     required String title,
     required String category,
@@ -277,10 +347,12 @@ class ApiService {
     throw Exception('Failed to join contest');
   }
 
-  static Future<Contest> updateContest(String id, {String? name, String? description}) async {
+  static Future<Contest> updateContest(String id, {String? name, String? description, String? startDate, String? endDate}) async {
     final body = <String, dynamic>{};
     if (name != null) body['name'] = name;
     if (description != null) body['description'] = description;
+    if (startDate != null) body['startDate'] = startDate;
+    if (endDate != null) body['endDate'] = endDate;
     final response = await http.put(
       Uri.parse('$_baseUrl/contests/$id'),
       headers: {'Content-Type': 'application/json'},

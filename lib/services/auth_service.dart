@@ -31,12 +31,21 @@ class AuthService {
         : (_iosClientId.isEmpty ? null : _iosClientId),
   );
 
+  static const String _adminEmail = String.fromEnvironment(
+    'ADMIN_EMAIL',
+    defaultValue: '',
+  );
+
   static AppUser? _currentUser;
   static String? _authToken;
 
   static AppUser? get currentUser => _currentUser;
   static String? get authToken => _authToken;
   static bool get isLoggedIn => _currentUser != null;
+  static bool get isAdmin =>
+      _currentUser != null &&
+      _adminEmail.isNotEmpty &&
+      _currentUser!.email == _adminEmail;
 
   static Future<AppUser?> getCurrentUser() async {
     if (_currentUser == null) {

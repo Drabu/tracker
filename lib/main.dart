@@ -3053,7 +3053,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   Widget _buildTabletDashboard(int todayIndex, int currentScore) {
     return Padding(
-      padding: const EdgeInsets.only(left: 24, top: 24, bottom: 24, right: 88),
+      padding: const EdgeInsets.only(left: 24, top: 24, bottom: 24, right: 24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

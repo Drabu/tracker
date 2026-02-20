@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../platform/web_adapter.dart' as web;
 import 'package:url_launcher/url_launcher.dart';
+import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/alexa_oauth_service.dart';
@@ -17,8 +18,10 @@ class SocialSettingsScreen extends StatefulWidget {
 
 class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
   final _alexaCodeController = TextEditingController();
+  final _usernameController = TextEditingController();
   bool _isLoading = true;
   bool _isSaving = false;
+  bool _isSavingUsername = false;
   String? _userId;
 
   // Alexa Reminder (LWA OAuth) state
@@ -40,6 +43,7 @@ class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
   @override
   void dispose() {
     _alexaCodeController.dispose();
+    _usernameController.dispose();
     _oauthSubscription?.cancel();
     super.dispose();
   }
@@ -75,6 +79,7 @@ class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
       final user = await AuthService.getCurrentUser();
       if (user != null) {
         _userId = user.id;
+        _usernameController.text = user.username ?? '';
         final settings = await ApiService.getAlexaSettings(user.id);
         _alexaCodeController.text = settings['alexaAccessCode'] ?? '';
 
@@ -120,6 +125,32 @@ class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
     }
     if (mounted) {
       setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _saveUsername() async {
+    if (_userId == null) return;
+    final username = _usernameController.text.trim();
+    if (username.isEmpty) return;
+
+    setState(() => _isSavingUsername = true);
+    try {
+      final updatedUser = await ApiService.updateUsername(_userId!, username);
+      await AuthService.updateCurrentUser(updatedUser);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Username updated')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update username: $e')),
+        );
+      }
+    }
+    if (mounted) {
+      setState(() => _isSavingUsername = false);
     }
   }
 
@@ -269,11 +300,74 @@ class _SocialSettingsScreenState extends State<SocialSettingsScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                _buildUsernameSection(),
+                const SizedBox(height: 16),
                 _buildAlexaSection(),
                 const SizedBox(height: 16),
                 _buildAlexaReminderSection(),
               ],
             ),
+    );
+  }
+
+  Widget _buildUsernameSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.person,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Username',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Shown on contest leaderboards instead of your full name',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(
+                labelText: 'Username',
+                hintText: 'Enter your username',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.alternate_email),
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isSavingUsername ? null : _saveUsername,
+                icon: _isSavingUsername
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save),
+                label: Text(_isSavingUsername ? 'Saving...' : 'Save'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

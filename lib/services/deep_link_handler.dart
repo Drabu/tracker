@@ -15,6 +15,9 @@ class DeepLinkHandler {
   StreamSubscription? _subscription;
   bool _initialized = false;
 
+  /// Notifier for pending contest invite (contestId)
+  static final ValueNotifier<String?> pendingInvite = ValueNotifier<String?>(null);
+
   /// Initialize deep link handling
   /// Call this once in main.dart after runApp
   Future<void> init() async {
@@ -22,9 +25,14 @@ class DeepLinkHandler {
     _initialized = true;
 
     if (kIsWeb) {
-      // Web doesn't use deep links the same way
-      // OAuth callback would be handled via redirect to a web page
-      debugPrint('DeepLinkHandler: Web platform - deep links handled differently');
+      // On web, check the current browser URL for invite links
+      final uri = Uri.base;
+      debugPrint('DeepLinkHandler: Web URL: $uri');
+      if (uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'invite') {
+        final contestId = uri.pathSegments[1];
+        debugPrint('DeepLinkHandler: Web invite detected: $contestId');
+        pendingInvite.value = contestId;
+      }
       return;
     }
 
@@ -36,10 +44,18 @@ class DeepLinkHandler {
 
   Future<void> _handleDeepLink(Uri uri) async {
     debugPrint('DeepLinkHandler: Received deep link: $uri');
-    
+
+    // Check for contest invite link: https://app.rythmn.fit/invite/{contestId}
+    if (uri.host == 'app.rythmn.fit' && uri.pathSegments.length >= 2 && uri.pathSegments[0] == 'invite') {
+      final contestId = uri.pathSegments[1];
+      debugPrint('DeepLinkHandler: Contest invite detected: $contestId');
+      pendingInvite.value = contestId;
+      return;
+    }
+
     // Try to handle as Alexa OAuth callback
     final handled = await AlexaOAuthService().handleCallbackUrl(uri);
-    
+
     if (!handled) {
       debugPrint('DeepLinkHandler: Unhandled deep link: $uri');
     }

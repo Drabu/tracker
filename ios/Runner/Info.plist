@@ -70,5 +70,7 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>146630121520-he3rvsbj6sh4om7b60c73i8pajs72pre.apps.googleusercontent.com</string>
+	<key>FlutterDeepLinkingEnabled</key>
+	<true/>
 </dict>
 </plist>

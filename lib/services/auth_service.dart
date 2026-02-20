@@ -104,6 +104,12 @@ class AuthService {
     }
   }
 
+  static Future<void> updateCurrentUser(AppUser user) async {
+    _currentUser = user;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userKey, jsonEncode(user.toJson()));
+  }
+
   static Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();

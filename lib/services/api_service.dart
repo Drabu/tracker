@@ -83,6 +83,18 @@ class ApiService {
     throw Exception('Failed to create/get user');
   }
 
+  static Future<AppUser> updateUsername(String userId, String username) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/users/$userId/username'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'username': username}),
+    );
+    if (response.statusCode == 200) {
+      return AppUser.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to update username');
+  }
+
   static Future<List<UserHabitPoints>> getUserHabitPoints(String userId) async {
     final response = await http.get(Uri.parse('$_baseUrl/users/$userId/habit-points'));
     if (response.statusCode == 200) {
@@ -251,6 +263,42 @@ class ApiService {
       return Contest.fromJson(jsonDecode(response.body));
     }
     throw Exception('Failed to create contest');
+  }
+
+  static Future<Contest> joinContest(String contestId, String userId) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/contests/$contestId/join'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'userId': userId}),
+    );
+    if (response.statusCode == 200) {
+      return Contest.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to join contest');
+  }
+
+  static Future<Contest> updateContest(String id, {String? name, String? description}) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (description != null) body['description'] = description;
+    final response = await http.put(
+      Uri.parse('$_baseUrl/contests/$id'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 200) {
+      return Contest.fromJson(jsonDecode(response.body));
+    }
+    throw Exception('Failed to update contest');
+  }
+
+  static Future<void> removeParticipant(String contestId, String userId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/contests/$contestId/participants/$userId'),
+    );
+    if (response.statusCode != 204) {
+      throw Exception('Failed to remove participant');
+    }
   }
 
   static Future<void> deleteContest(String id) async {

@@ -268,12 +268,14 @@ class AppUser {
   final String id;
   final String name;
   final String email;
+  final String? username;
   final String? photoUrl;
 
   AppUser({
     required this.id,
     required this.name,
     required this.email,
+    this.username,
     this.photoUrl,
   });
 
@@ -282,6 +284,7 @@ class AppUser {
       id: json['id'] ?? '',
       name: json['name'] ?? '',
       email: json['email'] ?? '',
+      username: json['username'],
       photoUrl: json['photoUrl'],
     );
   }
@@ -291,8 +294,19 @@ class AppUser {
       'id': id,
       'name': name,
       'email': email,
+      'username': username,
       'photoUrl': photoUrl,
     };
+  }
+
+  AppUser copyWith({String? username}) {
+    return AppUser(
+      id: id,
+      name: name,
+      email: email,
+      username: username ?? this.username,
+      photoUrl: photoUrl,
+    );
   }
 }
 
@@ -415,20 +429,28 @@ class TimelineConfig {
 class ContestParticipant {
   final String userId;
   final String userName;
+  final String? username;
   final String? userPhoto;
   final int totalScore;
 
   ContestParticipant({
     required this.userId,
     required this.userName,
+    this.username,
     this.userPhoto,
     this.totalScore = 0,
   });
+
+  String get displayName {
+    if (username != null && username!.isNotEmpty) return username!;
+    return userName.split(' ').first;
+  }
 
   factory ContestParticipant.fromJson(Map<String, dynamic> json) {
     return ContestParticipant(
       userId: json['userId'] ?? '',
       userName: json['userName'] ?? '',
+      username: json['username'],
       userPhoto: json['userPhoto'],
       totalScore: json['totalScore'] ?? 0,
     );
@@ -438,6 +460,7 @@ class ContestParticipant {
     return {
       'userId': userId,
       'userName': userName,
+      'username': username,
       'userPhoto': userPhoto,
       'totalScore': totalScore,
     };

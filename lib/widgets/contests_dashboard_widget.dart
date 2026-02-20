@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../screens/contest_screen.dart';
 
 class ContestRefreshNotifier extends ChangeNotifier {
@@ -66,9 +67,15 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
 
   @override
   Widget build(BuildContext context) {
-    // Separate active and ended contests
-    final activeContests = _contests.where((c) => c.hasStarted && !c.isEnded).toList();
-    final endedContests = _contests.where((c) => c.isEnded).toList()
+    final currentUserId = AuthService.currentUser?.id ?? '';
+
+    // Only show contests where the current user is a participant
+    final myContests = _contests.where(
+      (c) => c.participants.any((p) => p.userId == currentUserId),
+    ).toList();
+
+    final activeContests = myContests.where((c) => c.hasStarted && !c.isEnded).toList();
+    final endedContests = myContests.where((c) => c.isEnded).toList()
       ..sort((a, b) => DateTime.parse(b.endDate).compareTo(DateTime.parse(a.endDate)));
     final lastEndedContest = endedContests.isNotEmpty ? endedContests.first : null;
 
@@ -235,8 +242,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                               color: Colors.white.withValues(alpha: 0.1),
                               child: Center(
                                 child: Text(
-                                  _getFirstName(participant.userName).isNotEmpty
-                                      ? _getFirstName(participant.userName)[0].toUpperCase()
+                                  participant.displayName.isNotEmpty
+                                      ? participant.displayName[0].toUpperCase()
                                       : '?',
                                   style: const TextStyle(
                                     color: Colors.white,
@@ -282,7 +289,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                 const SizedBox(height: 2),
                 Text(
                   topThree.isNotEmpty 
-                      ? '🏆 ${_getFirstName(topThree.first.userName)} • ${topThree.first.totalScore} pts'
+                      ? '🏆 ${topThree.first.displayName} • ${topThree.first.totalScore} pts'
                       : 'No participants',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
@@ -313,9 +320,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
     );
   }
 
-  String _getFirstName(String fullName) {
-    return fullName.split(' ').first;
-  }
+
 
   Widget _buildContestItem(Contest contest) {
     final isEnded = contest.isEnded;
@@ -412,7 +417,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
 
   Widget _buildParticipantRow(ContestParticipant participant, int rank, bool isEnded, bool isTied) {
     final isLeader = rank == 0;
-    final firstName = _getFirstName(participant.userName);
+    final firstName = participant.displayName;
     
     // Medal icons
     const medals = ['🥇', '🥈', '🥉'];
@@ -597,8 +602,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                                 color: bgColor,
                                 child: Center(
                                   child: Text(
-                                    _getFirstName(participant.userName).isNotEmpty
-                                        ? _getFirstName(participant.userName)[0].toUpperCase()
+                                    participant.displayName.isNotEmpty
+                                        ? participant.displayName[0].toUpperCase()
                                         : '?',
                                     style: TextStyle(
                                       color: Colors.grey[700],
@@ -613,8 +618,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                               color: bgColor,
                               child: Center(
                                 child: Text(
-                                  _getFirstName(participant.userName).isNotEmpty
-                                      ? _getFirstName(participant.userName)[0].toUpperCase()
+                                  participant.displayName.isNotEmpty
+                                      ? participant.displayName[0].toUpperCase()
                                       : '?',
                                   style: TextStyle(
                                     color: Colors.grey[700],
@@ -669,8 +674,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                           color: const Color(0xFFFFE4E8),
                           child: Center(
                             child: Text(
-                              _getFirstName(leader.userName).isNotEmpty
-                                  ? _getFirstName(leader.userName)[0].toUpperCase()
+                              leader.displayName.isNotEmpty
+                                  ? leader.displayName[0].toUpperCase()
                                   : '?',
                               style: const TextStyle(
                                 color: Color(0xFFD4A853),
@@ -685,8 +690,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                         color: const Color(0xFFFFE4E8),
                         child: Center(
                           child: Text(
-                            _getFirstName(leader.userName).isNotEmpty
-                                ? _getFirstName(leader.userName)[0].toUpperCase()
+                            leader.displayName.isNotEmpty
+                                ? leader.displayName[0].toUpperCase()
                                 : '?',
                             style: const TextStyle(
                               color: Color(0xFFD4A853),
@@ -740,7 +745,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                 
                 final isLeader = index == 0;
                 final leftPos = position * barWidth - 18;
-                final firstName = _getFirstName(participant.userName);
+                final firstName = participant.displayName;
                 final initial = firstName.isNotEmpty ? firstName[0].toUpperCase() : '?';
                 
                 return Positioned(
@@ -926,8 +931,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                             color: bgColor,
                             child: Center(
                               child: Text(
-                                _getFirstName(participant.userName).isNotEmpty
-                                    ? _getFirstName(participant.userName)[0].toUpperCase()
+                                participant.displayName.isNotEmpty
+                                    ? participant.displayName[0].toUpperCase()
                                     : '?',
                                 style: TextStyle(
                                   color: Colors.grey[700],
@@ -942,8 +947,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                           color: bgColor,
                           child: Center(
                             child: Text(
-                              _getFirstName(participant.userName).isNotEmpty
-                                  ? _getFirstName(participant.userName)[0].toUpperCase()
+                              participant.displayName.isNotEmpty
+                                  ? participant.displayName[0].toUpperCase()
                                   : '?',
                               style: TextStyle(
                                 color: Colors.grey[700],
@@ -967,8 +972,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
       color: color.withValues(alpha: 0.3),
       child: Center(
         child: Text(
-          _getFirstName(participant.userName).isNotEmpty
-              ? _getFirstName(participant.userName)[0].toUpperCase()
+          participant.displayName.isNotEmpty
+              ? participant.displayName[0].toUpperCase()
               : '?',
           style: TextStyle(
             color: color,
@@ -1181,8 +1186,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                   radius: 14,
                   backgroundColor: color.withValues(alpha: 0.3),
                   child: Text(
-                    _getFirstName(participant.userName).isNotEmpty 
-                        ? _getFirstName(participant.userName)[0].toUpperCase()
+                    participant.displayName.isNotEmpty 
+                        ? participant.displayName[0].toUpperCase()
                         : '?',
                     style: TextStyle(
                       color: color,
@@ -1194,7 +1199,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  _getFirstName(participant.userName),
+                  participant.displayName,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: rank == 0 ? FontWeight.w600 : FontWeight.w500,
@@ -1249,8 +1254,8 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                       radius: 12,
                       backgroundColor: color.withValues(alpha: 0.3),
                       child: Text(
-                        _getFirstName(participant.userName).isNotEmpty 
-                            ? _getFirstName(participant.userName)[0].toUpperCase()
+                        participant.displayName.isNotEmpty 
+                            ? participant.displayName[0].toUpperCase()
                             : '?',
                         style: TextStyle(
                           color: color,
@@ -1268,7 +1273,7 @@ class _ContestsDashboardWidgetState extends State<ContestsDashboardWidget> with 
                     ),
                   if (rank == 0) const SizedBox(width: 4),
                   Text(
-                    _getFirstName(participant.userName),
+                    participant.displayName,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,

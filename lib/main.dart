@@ -18,6 +18,7 @@ import 'screens/timeline_screen.dart';
 import 'screens/habit_list_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/contest_screen.dart';
+import 'screens/contest_invite_screen.dart';
 import 'screens/social_settings_screen.dart';
 import 'screens/glass_dashboard_screen.dart';
 import 'models/models.dart';
@@ -63,11 +64,23 @@ class DailyTrackerApp extends StatefulWidget {
 
 class _DailyTrackerAppState extends State<DailyTrackerApp> {
   bool _isLoggedIn = false;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
     _checkLoginStatus();
+    DeepLinkHandler.pendingInvite.addListener(_onPendingInvite);
+    // Check for invite from web URL after first frame (navigator ready)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _onPendingInvite();
+    });
+  }
+
+  @override
+  void dispose() {
+    DeepLinkHandler.pendingInvite.removeListener(_onPendingInvite);
+    super.dispose();
   }
 
   void _checkLoginStatus() {
@@ -76,9 +89,35 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
     });
   }
 
+  void _onPendingInvite() {
+    final contestId = DeepLinkHandler.pendingInvite.value;
+    if (contestId != null && _isLoggedIn) {
+      _navigateToInvitePage(contestId);
+    }
+  }
+
+  void _checkPendingInviteAfterLogin() {
+    final contestId = DeepLinkHandler.pendingInvite.value;
+    if (contestId != null) {
+      _navigateToInvitePage(contestId);
+    }
+  }
+
+  void _navigateToInvitePage(String contestId) {
+    DeepLinkHandler.pendingInvite.value = null;
+    final ctx = _navigatorKey.currentContext;
+    if (ctx == null) return;
+    Navigator.of(ctx).push(
+      MaterialPageRoute(
+        builder: (_) => ContestInvitePage(contestId: contestId),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       title: 'Daily Tracker',
       scrollBehavior: const MaterialScrollBehavior().copyWith(
         scrollbars: false,
@@ -104,6 +143,7 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
                 setState(() {
                   _isLoggedIn = true;
                 });
+                _checkPendingInviteAfterLogin();
               },
             ),
     );
@@ -673,9 +713,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     onTap: _playAirplaneCallSound,
                   ),
                   SidebarItem(
-                    icon: Icons.speaker,
-                    label: 'Integrations',
-                    color: Colors.purple,
+                    icon: Icons.settings,
+                    label: 'Settings',
+                    color: Colors.white70,
                     onTap: () {
                       Navigator.push(
                         context,
@@ -3715,30 +3755,33 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                'TODAY\'S FOCUS',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.9),
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  _formatFullDate(),
+          Padding(
+            padding: EdgeInsets.only(left: widget.showSidebar ? 24 : 0),
+            child: Row(
+              children: [
+                Text(
+                  'TODAY\'S FOCUS',
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF58A6FF),
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.9),
+                    letterSpacing: 0.5,
                   ),
-                  textAlign: TextAlign.right,
                 ),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _formatFullDate(),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF58A6FF),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           _buildQuickStatsCard(dayIndex),

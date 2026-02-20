@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
@@ -14,8 +15,14 @@ class _ContestScreenState extends State<ContestScreen> {
   List<Contest> _contests = [];
   bool _isLoading = true;
 
-  List<Contest> get _activeContests => _contests.where((c) => !c.isEnded).toList();
-  List<Contest> get _pastContests => _contests.where((c) => c.isEnded).toList();
+  String get _currentUserId => AuthService.currentUser?.id ?? '';
+
+  /// Only show contests where the current user is a participant.
+  List<Contest> get _myContests =>
+      _contests.where((c) => c.participants.any((p) => p.userId == _currentUserId)).toList();
+
+  List<Contest> get _activeContests => _myContests.where((c) => !c.isEnded).toList();
+  List<Contest> get _pastContests => _myContests.where((c) => c.isEnded).toList();
 
   @override
   void initState() {
@@ -261,8 +268,8 @@ class _ContestScreenState extends State<ContestScreen> {
                         radius: 32,
                         backgroundColor: const Color(0xFFFFD700).withOpacity(0.2),
                         child: Text(
-                          winner.userName.isNotEmpty 
-                              ? winner.userName[0].toUpperCase() 
+                          winner.displayName.isNotEmpty
+                              ? winner.displayName[0].toUpperCase()
                               : '?',
                           style: const TextStyle(
                             color: Color(0xFFFFD700),
@@ -285,7 +292,7 @@ class _ContestScreenState extends State<ContestScreen> {
           const SizedBox(height: 10),
           // Winner name
           Text(
-            winner.userName.split(' ').first,
+            winner.displayName,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 14,
@@ -330,7 +337,7 @@ class _ContestScreenState extends State<ContestScreen> {
 
 }
 
-class ContestCard extends StatelessWidget {
+class ContestCard extends StatefulWidget {
   final Contest contest;
   final VoidCallback onRefresh;
 
@@ -341,97 +348,294 @@ class ContestCard extends StatelessWidget {
   });
 
   @override
+  State<ContestCard> createState() => _ContestCardState();
+}
+
+class _ContestCardState extends State<ContestCard> {
+  bool _isLoading = false;
+
+  Contest get contest => widget.contest;
+  String get _currentUserId => AuthService.currentUser?.id ?? '';
+  bool get _isCreator => contest.creatorId == _currentUserId;
+
+  Future<void> _showRenameDialog() async {
+    final nameController = TextEditingController(text: contest.name);
+    final descController = TextEditingController(text: contest.description);
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Rename Contest', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  filled: true,
+                  fillColor: const Color(0xFF0D1117),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descController,
+                style: const TextStyle(color: Colors.white),
+                maxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+                  filled: true,
+                  fillColor: const Color(0xFF0D1117),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF238636), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                    child: const Text('Save', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (result == true && mounted) {
+      setState(() => _isLoading = true);
+      try {
+        await ApiService.updateContest(contest.id, name: nameController.text.trim(), description: descController.text.trim());
+        widget.onRefresh();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to rename: $e')));
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+    nameController.dispose();
+    descController.dispose();
+  }
+
+  Future<void> _confirmDeleteContest() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        title: const Text('Delete Contest', style: TextStyle(color: Colors.white)),
+        content: Text('Are you sure you want to delete "${contest.name}"?', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete', style: TextStyle(color: Colors.redAccent))),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(() => _isLoading = true);
+      try {
+        await ApiService.deleteContest(contest.id);
+        widget.onRefresh();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _confirmRemoveParticipant(ContestParticipant participant) async {
+    final isSelf = participant.userId == _currentUserId;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        title: Text(isSelf ? 'Leave Contest' : 'Remove Participant', style: const TextStyle(color: Colors.white)),
+        content: Text(
+          isSelf ? 'Are you sure you want to leave "${contest.name}"?' : 'Remove ${participant.displayName} from this contest?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel', style: TextStyle(color: Colors.white54))),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: Text(isSelf ? 'Leave' : 'Remove', style: const TextStyle(color: Colors.redAccent))),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(() => _isLoading = true);
+      try {
+        await ApiService.removeParticipant(contest.id, participant.userId);
+        widget.onRefresh();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isEnded = contest.isEnded;
     final hasStarted = contest.hasStarted;
-    
+    final isParticipant = !_isCreator && contest.participants.any((p) => p.userId == _currentUserId);
+
     final sortedParticipants = List<ContestParticipant>.from(contest.participants)
       ..sort((a, b) => b.totalScore.compareTo(a.totalScore));
 
-    return Card(
-      color: const Color(0xFF161B22),
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: isEnded
-              ? const Color(0xFF3FB950).withOpacity(0.5)
-              : hasStarted
-                  ? const Color(0xFF58A6FF).withOpacity(0.5)
-                  : Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Stack(
+      children: [
+        Card(
+          color: const Color(0xFF161B22),
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isEnded
+                  ? const Color(0xFF3FB950).withOpacity(0.5)
+                  : hasStarted
+                      ? const Color(0xFF58A6FF).withOpacity(0.5)
+                      : Colors.white.withOpacity(0.1),
+              width: 1,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    contest.name,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        contest.name,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    if (!isEnded && _isCreator)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: IconButton(
+                          icon: const Icon(Icons.link, color: Color(0xFF58A6FF), size: 20),
+                          tooltip: 'Copy Invite Link',
+                          onPressed: () {
+                            final link = 'https://app.rythmn.fit/invite/${contest.id}';
+                            Clipboard.setData(ClipboardData(text: link));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Invite link copied!')),
+                            );
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ),
+                    if (_isCreator)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert, color: Colors.white.withOpacity(0.5), size: 20),
+                        color: const Color(0xFF21262D),
+                        onSelected: (value) {
+                          if (value == 'rename') _showRenameDialog();
+                          if (value == 'delete') _confirmDeleteContest();
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(value: 'rename', child: Text('Rename Contest', style: TextStyle(color: Colors.white))),
+                          const PopupMenuItem(value: 'delete', child: Text('Delete Contest', style: TextStyle(color: Colors.redAccent))),
+                        ],
+                      )
+                    else if (isParticipant)
+                      IconButton(
+                        icon: Icon(Icons.logout, color: Colors.white.withOpacity(0.4), size: 18),
+                        tooltip: 'Leave Contest',
+                        onPressed: () {
+                          final me = contest.participants.firstWhere((p) => p.userId == _currentUserId);
+                          _confirmRemoveParticipant(me);
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    const SizedBox(width: 8),
+                    _buildStatusBadge(isEnded, hasStarted),
+                  ],
+                ),
+                if (contest.description.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    contest.description,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
                     ),
                   ),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 14,
+                      color: Colors.white.withOpacity(0.5),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${_formatDate(contest.startDate)} - ${_formatDate(contest.endDate)}',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
-                _buildStatusBadge(isEnded, hasStarted),
-              ],
-            ),
-            if (contest.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                contest.description,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(
-                  Icons.calendar_today,
-                  size: 14,
-                  color: Colors.white.withOpacity(0.5),
-                ),
-                const SizedBox(width: 6),
+                const SizedBox(height: 16),
+                if (isEnded && sortedParticipants.isNotEmpty) ...[
+                  _buildPodiumSection(sortedParticipants.take(3).toList()),
+                  const SizedBox(height: 12),
+                ],
                 Text(
-                  '${_formatDate(contest.startDate)} - ${_formatDate(contest.endDate)}',
+                  'Leaderboard',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 12,
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 8),
+                ...sortedParticipants.asMap().entries.map((entry) {
+                  final rank = entry.key + 1;
+                  final participant = entry.value;
+                  return _buildParticipantRow(rank, participant, isEnded);
+                }),
               ],
             ),
-            const SizedBox(height: 16),
-            if (isEnded && sortedParticipants.isNotEmpty) ...[
-              _buildPodiumSection(sortedParticipants.take(3).toList()),
-              const SizedBox(height: 12),
-            ],
-            Text(
-              'Leaderboard',
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.7),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...sortedParticipants.asMap().entries.map((entry) {
-              final rank = entry.key + 1;
-              final participant = entry.value;
-              return _buildParticipantRow(rank, participant, isEnded);
-            }),
-          ],
+          ),
         ),
-      ),
+        if (_isLoading)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+      ],
     );
   }
 
@@ -471,9 +675,6 @@ class ContestCard extends StatelessWidget {
     );
   }
 
-  String _getFirstName(String fullName) {
-    return fullName.split(' ').first;
-  }
 
   Widget _buildPodiumSection(List<ContestParticipant> topThree) {
     const rankLabels = ['🥇 Winner', '🥈 2nd Place', '🥉 3rd Place'];
@@ -547,8 +748,8 @@ class ContestCard extends StatelessWidget {
                       radius: 18,
                       backgroundColor: color.withOpacity(0.3),
                       child: Text(
-                        _getFirstName(participant.userName).isNotEmpty 
-                            ? _getFirstName(participant.userName)[0].toUpperCase()
+                        participant.displayName.isNotEmpty 
+                            ? participant.displayName[0].toUpperCase()
                             : '?',
                         style: TextStyle(
                           color: color,
@@ -572,7 +773,7 @@ class ContestCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _getFirstName(participant.userName),
+                          participant.displayName,
                           style: TextStyle(
                             color: rank == 0 ? Colors.white : Colors.white.withOpacity(0.9),
                             fontSize: 16,
@@ -607,6 +808,8 @@ class ContestCard extends StatelessWidget {
       if (rank == 3) rankColor = const Color(0xFFCD7F32);
     }
 
+    final canRemove = _isCreator && participant.userId != _currentUserId && !isEnded;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -639,7 +842,7 @@ class ContestCard extends StatelessWidget {
               radius: 14,
               backgroundColor: Colors.white.withOpacity(0.1),
               child: Text(
-                participant.userName.isNotEmpty ? participant.userName[0].toUpperCase() : '?',
+                participant.displayName.isNotEmpty ? participant.displayName[0].toUpperCase() : '?',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
@@ -649,7 +852,7 @@ class ContestCard extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _getFirstName(participant.userName),
+              participant.displayName,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 14,
@@ -664,6 +867,15 @@ class ContestCard extends StatelessWidget {
               fontWeight: FontWeight.w600,
             ),
           ),
+          if (canRemove)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: InkWell(
+                onTap: () => _confirmRemoveParticipant(participant),
+                borderRadius: BorderRadius.circular(12),
+                child: Icon(Icons.close, size: 16, color: Colors.white.withOpacity(0.3)),
+              ),
+            ),
         ],
       ),
     );
@@ -694,32 +906,7 @@ class _CreateContestDialogState extends State<CreateContestDialog> {
   final _descriptionController = TextEditingController();
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now().add(const Duration(days: 7));
-  List<UserBasic> _allUsers = [];
-  Set<String> _selectedUserIds = {};
   bool _isLoading = false;
-  bool _isLoadingUsers = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUsers();
-  }
-
-  Future<void> _loadUsers() async {
-    try {
-      final users = await ApiService.getAllUsers();
-      setState(() {
-        _allUsers = users;
-        _isLoadingUsers = false;
-        final currentUserId = AuthService.currentUser?.id;
-        if (currentUserId != null) {
-          _selectedUserIds.add(currentUserId);
-        }
-      });
-    } catch (e) {
-      setState(() => _isLoadingUsers = false);
-    }
-  }
 
   Future<void> _selectDate(bool isStart) async {
     final picked = await showDatePicker(
@@ -755,27 +942,23 @@ class _CreateContestDialogState extends State<CreateContestDialog> {
 
   Future<void> _createContest() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedUserIds.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least 2 participants')),
-      );
-      return;
-    }
 
     setState(() => _isLoading = true);
 
     try {
-      await ApiService.createContest(
+      final currentUserId = AuthService.currentUser?.id ?? '';
+      final contest = await ApiService.createContest(
         name: _nameController.text.trim(),
         description: _descriptionController.text.trim(),
-        creatorId: AuthService.currentUser?.id ?? '',
+        creatorId: currentUserId,
         startDate: _startDate.toIso8601String().split('T')[0],
         endDate: DateTime(_endDate.year, _endDate.month, _endDate.day, 23, 59, 59).toIso8601String(),
-        userIds: _selectedUserIds.toList(),
+        userIds: [currentUserId],
       );
       if (mounted) {
         Navigator.of(context).pop();
         widget.onCreated();
+        _showInviteLinkDialog(context, contest.id, contest.name);
       }
     } catch (e) {
       if (mounted) {
@@ -786,6 +969,83 @@ class _CreateContestDialogState extends State<CreateContestDialog> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showInviteLinkDialog(BuildContext context, String contestId, String contestName) {
+    final inviteLink = 'https://app.rythmn.fit/invite/$contestId';
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle, color: Color(0xFF3FB950), size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                'Contest Created!',
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                contestName,
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Share this link to invite friends:',
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D1117),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        inviteLink,
+                        style: const TextStyle(color: Color(0xFF58A6FF), fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.copy, color: Color(0xFF58A6FF), size: 20),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: inviteLink));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Invite link copied!')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF238636),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  child: const Text('Done', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -884,88 +1144,6 @@ class _CreateContestDialogState extends State<CreateContestDialog> {
                     child: _buildDateSelector('End', _endDate, () => _selectDate(false)),
                   ),
                 ],
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Select Participants',
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D1117),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: _isLoadingUsers
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(),
-                          ),
-                        )
-                      : _allUsers.isEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Text(
-                                'No users found',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                ),
-                              ),
-                            )
-                          : ListView.builder(
-                              shrinkWrap: true,
-                              itemCount: _allUsers.length,
-                              itemBuilder: (context, index) {
-                                final user = _allUsers[index];
-                                final isSelected = _selectedUserIds.contains(user.id);
-                                return CheckboxListTile(
-                                  value: isSelected,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      if (v == true) {
-                                        _selectedUserIds.add(user.id);
-                                      } else {
-                                        _selectedUserIds.remove(user.id);
-                                      }
-                                    });
-                                  },
-                                  title: Text(
-                                    user.name,
-                                    style: const TextStyle(color: Colors.white),
-                                  ),
-                                  subtitle: Text(
-                                    user.email,
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.5),
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  secondary: user.photoUrl != null && user.photoUrl!.isNotEmpty
-                                      ? CircleAvatar(
-                                          backgroundImage: NetworkImage(user.photoUrl!),
-                                          radius: 18,
-                                        )
-                                      : CircleAvatar(
-                                          backgroundColor: Colors.white.withOpacity(0.1),
-                                          radius: 18,
-                                          child: Text(
-                                            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
-                                            style: const TextStyle(color: Colors.white),
-                                          ),
-                                        ),
-                                  activeColor: const Color(0xFF58A6FF),
-                                  checkColor: Colors.white,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                                );
-                              },
-                            ),
-                ),
               ),
               const SizedBox(height: 20),
               Row(

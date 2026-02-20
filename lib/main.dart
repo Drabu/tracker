@@ -1,39 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart'
-    show kDebugMode, kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:async';
 import 'dart:ui';
-
-import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-
-import 'platform/web_adapter.dart' as web;
-
-import 'screens/panel_config_screen.dart';
-import 'screens/timeline_config_screen.dart';
-import 'screens/timeline_screen.dart';
-import 'screens/habit_list_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/contest_screen.dart';
-import 'screens/contest_invite_screen.dart';
-import 'screens/social_settings_screen.dart';
-import 'screens/glass_dashboard_screen.dart';
-import 'models/models.dart';
-import 'services/api_service.dart';
-import 'services/auth_service.dart';
-import 'services/deep_link_handler.dart';
-import 'widgets/expandable_sidebar.dart';
-import 'widgets/contests_dashboard_widget.dart' show ContestsDashboardWidget, contestRefreshNotifier;
-import 'widgets/category_pie_chart.dart';
-import 'screens/ios_home_screen.dart';
-import 'screens/ios_dashboard_screen.dart';
-import 'widgets/weekly_momentum_widget.dart' show WeeklyMomentumWidget, momentumRefreshNotifier;
-import 'screens/daily_insights_screen.dart';
-
-bool get isIOS => !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+import 'dart:html' as html show window;
+import 'dart:js' as js;
+import 'dart:html' as html;
 
 enum HabitState {
   none,
@@ -45,83 +19,17 @@ enum HabitState {
   avoided
 }
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await AuthService.init();
-  
-  // Initialize deep link handler for OAuth callbacks
-  await DeepLinkHandler().init();
-  
+void main() {
   runApp(const DailyTrackerApp());
 }
 
-class DailyTrackerApp extends StatefulWidget {
+class DailyTrackerApp extends StatelessWidget {
   const DailyTrackerApp({super.key});
-
-  @override
-  State<DailyTrackerApp> createState() => _DailyTrackerAppState();
-}
-
-class _DailyTrackerAppState extends State<DailyTrackerApp> {
-  bool _isLoggedIn = false;
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _checkLoginStatus();
-    DeepLinkHandler.pendingInvite.addListener(_onPendingInvite);
-    // Check for invite from web URL after first frame (navigator ready)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _onPendingInvite();
-    });
-  }
-
-  @override
-  void dispose() {
-    DeepLinkHandler.pendingInvite.removeListener(_onPendingInvite);
-    super.dispose();
-  }
-
-  void _checkLoginStatus() {
-    setState(() {
-      _isLoggedIn = AuthService.isLoggedIn;
-    });
-  }
-
-  void _onPendingInvite() {
-    final contestId = DeepLinkHandler.pendingInvite.value;
-    if (contestId != null && _isLoggedIn) {
-      _navigateToInvitePage(contestId);
-    }
-  }
-
-  void _checkPendingInviteAfterLogin() {
-    final contestId = DeepLinkHandler.pendingInvite.value;
-    if (contestId != null) {
-      _navigateToInvitePage(contestId);
-    }
-  }
-
-  void _navigateToInvitePage(String contestId) {
-    DeepLinkHandler.pendingInvite.value = null;
-    final ctx = _navigatorKey.currentContext;
-    if (ctx == null) return;
-    Navigator.of(ctx).push(
-      MaterialPageRoute(
-        builder: (_) => ContestInvitePage(contestId: contestId),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: _navigatorKey,
       title: 'Daily Tracker',
-      scrollBehavior: const MaterialScrollBehavior().copyWith(
-        scrollbars: false,
-      ),
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0D1117),
         cardColor: const Color(0xFF161B22),
@@ -136,16 +44,7 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
           surface: Color(0xFF161B22),
         ),
       ),
-      home: _isLoggedIn
-          ? (isIOS ? const IOSHomeScreen() : const DailyTrackerHome())
-          : LoginScreen(
-              onLoginSuccess: () {
-                setState(() {
-                  _isLoggedIn = true;
-                });
-                _checkPendingInviteAfterLogin();
-              },
-            ),
+      home: const DailyTrackerHome(),
     );
   }
 }
@@ -153,48 +52,18 @@ class _DailyTrackerAppState extends State<DailyTrackerApp> {
 enum ViewType { day, week, month, year }
 
 class DailyTrackerHome extends StatefulWidget {
-  final bool showSidebar;
-
-  const DailyTrackerHome({super.key, this.showSidebar = true});
+  const DailyTrackerHome({super.key});
 
   @override
   State<DailyTrackerHome> createState() => _DailyTrackerHomeState();
 }
 
 class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProviderStateMixin {
-  String get _currentUserId => AuthService.currentUser?.id ?? '';
-  
   ViewType _currentView = ViewType.day;
   DateTime _selectedDate = DateTime.now();
   DateTime _currentWeekStart = DateTime.now();
   final Map<String, Map<String, Map<int, HabitState>>> _trackingData = {}; // habit -> weekKey -> dayIndex -> state
   final Map<String, Map<String, Map<int, TimeOfDay?>>> _timeData = {}; // habit -> weekKey -> dayIndex -> time
-  
-  // Timeline data from backend
-  List<TimelineEntry> _timelineEntries = [];
-  Map<String, Habit> _habitsMap = {};
-  Timeline? _currentTimeline;
-  bool _isLoadingTimeline = false;
-  DateTime _timelineSelectedDate = DateTime.now();
-  
-  // Dynamic categories and habits loaded from API
-  Map<String, List<String>> _categories = {};
-  List<String> _categoryList = [];
-  bool _isLoadingCategories = false;
-  
-  // Category colors - generated dynamically based on categories
-  static const List<Color> _categoryColorPalette = [
-    Color(0xFFFF453A), // Red
-    Color(0xFF30D158), // Green
-    Color(0xFFFF9F0A), // Orange
-    Color(0xFF00C7BE), // Teal
-    Color(0xFF5856D6), // Purple
-    Color(0xFF007AFF), // Blue
-    Color(0xFFAF52DE), // Magenta
-    Color(0xFFFFD60A), // Yellow
-  ];
-  
-  Map<String, Color> _categoryColors = {};
   
   late AnimationController _progressAnimationController;
   late AnimationController _ringAnimationController;
@@ -211,20 +80,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   bool _isIdleMode = false;
   DateTime _lastInteraction = DateTime.now();
   String _currentHabit = '';
-  Object? _audioContext;
+  js.JsObject? _audioContext;
+  html.AudioElement? _audioElement;
   bool _audioContextResumed = false;
-
-  late final AudioPlayer _assetAudioPlayer;
-
-  Object? _webCabinChime;
   
-  // Schedule section expansion states
-  final Map<String, bool> _scheduleSectionExpanded = {
-    'Morning': false,
-    'Afternoon': false,
-    'Evening': false,
-  };
-  
+  // Audio elements for different sounds
+  html.AudioElement? _completedSoundElement;
+  html.AudioElement? _missedSoundElement;
+  html.AudioElement? _partialSoundElement;
   
   // Value notifiers for granular updates
   final ValueNotifier<int> _pointsNotifier = ValueNotifier<int>(0);
@@ -233,78 +96,67 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   final List<String> _weekDays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-  // Dynamic sets - populated from API habits
-  Set<String> _prayerHabits = {};
-  Set<String> _timeBasedHabits = {};
-  Set<String> _sleepTrackingHabits = {};
-  Set<String> _compoundingHabits = {};
-  Set<String> _userCompoundHabitIds = {};
+  final Map<String, List<String>> _categories = {
+    'Akhirat': [
+      'Quran',
+      'Fajr',
+      'Duhr',
+      'Asr',
+      'Maghrib',
+      'Isha',
+      'Evening Quran',
+    ],
+    'Personal': [
+      'Guitar',
+      'Bar Chord',
+      'Fingerstyle',
+      'Random',
+      'Book',
+      'Walk',
+    ],
+    'Professional': [
+      'Typing',
+      'Data Structures',
+    ],
+    'Health': [
+      'Breakfast',
+      'Eggs',
+      'Meal',
+      'Coffee',
+      'Cold Shower',
+      'Gym',
+      'Mid Day Shower',
+      'Water',
+    ],
+    'Sleep Tracking': [
+      'Bed Time',
+      'Sleep Time', 
+      'Mid Day Sleep',
+      'Wake Time (W.T.)',
+    ],
+  };
+
+  final Set<String> _prayerHabits = {
+    'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha'
+  };
+
+  final Set<String> _timeBasedHabits = {
+    'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Gym', 'Bed Time', 'Sleep Time', 'Wake Time (W.T.)'
+  };
+
+  final Set<String> _sleepTrackingHabits = {
+    'Bed Time', 'Sleep Time', 'Mid Day Sleep', 'Wake Time (W.T.)'
+  };
+
+  final Set<String> _compoundingHabits = {
+    'Quran', 'Fajr', 'Duhr', 'Asr', 'Maghrib', 'Isha', 'Evening Quran', // Akhirat
+    'Guitar', 'Book', // Personal  
+    'Typing', 'Data Structures', // Professional
+    'Gym', 'Water' // Health
+  };
 
   // Development mode flag - set to true to enable all habits on weekends
   static const bool _isDevelopmentMode = true;
-
-  Color _getCategoryColor(String categoryName) {
-    return _categoryColors[categoryName] ?? const Color(0xFF58A6FF);
-  }
-
-  // Helper to get habit title from ID
-  String _getHabitTitle(String habitId) {
-    return _habitsMap[habitId]?.title ?? habitId;
-  }
-
-  // Helper to get habit from ID
-  Habit? _getHabit(String habitId) {
-    return _habitsMap[habitId];
-  }
-
-  void _initializeCategoryColors() {
-    _categoryColors = {};
-    for (int i = 0; i < _categoryList.length; i++) {
-      _categoryColors[_categoryList[i]] = _categoryColorPalette[i % _categoryColorPalette.length];
-    }
-  }
-
-  void _initializeHabitSets() {
-    _prayerHabits = {};
-    _timeBasedHabits = {};
-    _sleepTrackingHabits = {};
-    _compoundingHabits = {};
-    
-    for (var habit in _habitsMap.values) {
-      final title = habit.title;
-      final category = habit.category.toLowerCase();
-      
-      // Determine habit types based on title patterns
-      if (['fajr', 'duhr', 'asr', 'maghrib', 'isha'].contains(title.toLowerCase())) {
-        _prayerHabits.add(title);
-        _timeBasedHabits.add(title);
-      }
-      
-      if (category.contains('sleep') || ['bed time', 'sleep time', 'wake time', 'mid day sleep'].any((s) => title.toLowerCase().contains(s))) {
-        _sleepTrackingHabits.add(title);
-        if (!title.toLowerCase().contains('mid day')) {
-          _timeBasedHabits.add(title);
-        }
-      }
-      
-      if (title.toLowerCase().contains('gym')) {
-        _timeBasedHabits.add(title);
-      }
-      
-      // Add to compounding habits if user marked it as compound
-      if (_userCompoundHabitIds.contains(habit.id)) {
-        _compoundingHabits.add(habit.id);
-      }
-    }
-  }
-
-  bool _isHabitDisabledById(String habitId, int dayIndex) {
-    if (_isDevelopmentMode) return false;
-    bool isWeekend = dayIndex == 5 || dayIndex == 6;
-    final title = _getHabitTitle(habitId);
-    bool isPrayer = _prayerHabits.contains(title);
-    return !isPrayer && isWeekend;
-  }
 
   bool _isHabitDisabled(String habit, int dayIndex) {
     if (_isDevelopmentMode) return false; // Never disable habits in dev mode
@@ -387,49 +239,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  void _showHabitStateDialogById(String habitId, int dayIndex) {
-    final habitTitle = _getHabitTitle(habitId);
-    List<HabitState> availableStates = _getAvailableStates(habitTitle);
-    bool isSleepTracking = _sleepTrackingHabits.contains(habitTitle);
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('$habitTitle - ${_weekDays[dayIndex]}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: availableStates.map((state) {
-              int points = _getHabitPoints(habitTitle, state, dayIndex);
-              return ListTile(
-                title: Text(_getStateDisplayName(state)),
-                subtitle: Text('$points points'),
-                onTap: () async {
-                  if (isSleepTracking && state != HabitState.none && state != HabitState.missed) {
-                    if (!mounted) return;
-                    TimeOfDay? selectedTime = await showTimePicker(
-                      context: context,
-                      initialTime: TimeOfDay.now(),
-                    );
-                    
-                    if (selectedTime != null && mounted) {
-                      _updateHabitStateById(habitId, dayIndex, state, selectedTime);
-                      _saveData();
-                    }
-                  } else {
-                    _updateHabitStateById(habitId, dayIndex, state, null);
-                    _saveData();
-                  }
-                  if (mounted) Navigator.of(context).pop();
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
   List<HabitState> _getAvailableStates(String habit) {
     if (habit == 'Mid Day Sleep') {
       return [HabitState.none, HabitState.avoided, HabitState.completed, HabitState.missed];
@@ -471,33 +280,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   int _getDailyScore(int dayIndex) {
     int score = 0;
     
-    for (String habitTitle in _habitStatePoints.keys) {
-      if (!_isHabitDisabled(habitTitle, dayIndex)) {
-        String? habitId;
-        for (var entry in _habitsMap.entries) {
-          if (entry.value.title == habitTitle) {
-            habitId = entry.key;
-            break;
-          }
-        }
-        // Check timeline entries for completion status
-        HabitState state = HabitState.none;
-        if (habitId != null) {
-          final timelineEntry = _timelineEntries.firstWhere(
-            (e) => e.habitId == habitId,
-            orElse: () => Event(
-              id: '',
-              habit: Habit(id: '', title: '', category: ''),
-              startMinutes: 0,
-              durationMinutes: 0,
-              points: 0,
-              completionStatus: CompletionStatus.none,
-            ),
-          );
-          state = _completionStatusToHabitState(timelineEntry.completionStatus);
-        }
+    for (String habit in _habitStatePoints.keys) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state != HabitState.none) {
-          score += _getHabitPoints(habitTitle, state, dayIndex);
+          score += _getHabitPoints(habit, state, dayIndex);
         }
       }
     }
@@ -634,111 +421,41 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       onPanDown: (_) => _onUserInteraction(),
       onScaleStart: (_) => _onUserInteraction(),
       child: Scaffold(
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            _shouldShowContributionGraph()
-                ? Column(
-                    children: [
-                      _buildContributionGraph(),
-                      Expanded(child: _buildCurrentView()),
-                    ],
-                  )
-                : _buildCurrentView(),
-            if (_currentView == ViewType.day && widget.showSidebar)
-              ExpandableSidebar(
-                items: [
-                  if (kDebugMode)
-                    SidebarItem(
-                      icon: Icons.auto_awesome,
-                      label: 'Glass Dashboard',
-                      color: const Color(0xFF22D3EE),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          PageRouteBuilder(
-                            pageBuilder: (context, animation, secondaryAnimation) =>
-                                const GlassDashboardScreen(),
-                            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                              return FadeTransition(opacity: animation, child: child);
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                  SidebarItem(
-                    icon: Icons.calendar_today,
-                    label: 'Select Date',
-                    color: const Color(0xFF58A6FF),
-                    onTap: _showDatePicker,
-                  ),
-                  SidebarItem(
-                    icon: Icons.timeline,
-                    label: 'Timeline',
-                    color: Colors.green,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) =>
-                              TimelineScreen(userId: _currentUserId),
-                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                            return FadeTransition(opacity: animation, child: child);
-                          },
-                        ),
-                      ).then((_) => _loadTodaysTimeline());
-                    },
-                  ),
-                  SidebarItem(
-                    icon: Icons.emoji_events,
-                    label: 'Contests',
-                    color: const Color(0xFFFFD700),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) =>
-                              const ContestScreen(),
-                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                            return FadeTransition(opacity: animation, child: child);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  SidebarItem(
-                    icon: Icons.volume_up,
-                    label: 'Test Sound',
-                    color: Colors.blue,
-                    onTap: _playAirplaneCallSound,
-                  ),
-                  SidebarItem(
-                    icon: Icons.settings,
-                    label: 'Settings',
-                    color: Colors.white70,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) =>
-                              const SocialSettingsScreen(),
-                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                            return FadeTransition(opacity: animation, child: child);
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                  SidebarItem(
-                    icon: Icons.logout,
-                    label: 'Logout',
-                    color: Colors.redAccent,
-                    onTap: _handleLogout,
-                  ),
+        appBar: _buildAppBar(),
+        body: _shouldShowContributionGraph()
+            ? Column(
+                children: [
+                  _buildContributionGraph(),
+                  Expanded(child: _buildCurrentView()),
                 ],
-              ),
+              )
+            : _buildCurrentView(),
+        floatingActionButton: _currentView == ViewType.day ? Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FloatingActionButton(
+              onPressed: () {
+                final todayIndex = DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1;
+                final currentHabit = _getCurrentHabitInAction(todayIndex);
+                print('Current habit: $currentHabit');
+                print('Stored habit: $_currentHabit');
+                print('Time: ${DateTime.now()}');
+              },
+              child: const Icon(Icons.info),
+              tooltip: 'Check Current Habit',
+              backgroundColor: Colors.green,
+              heroTag: "info",
+            ),
+            const SizedBox(height: 10),
+            FloatingActionButton(
+              onPressed: _playAirplaneCallSound,
+              child: const Icon(Icons.volume_up),
+              tooltip: 'Test Habit Change Sound',
+              backgroundColor: Colors.blue,
+              heroTag: "sound",
+            ),
           ],
-        ),
+        ) : null,
       ),
     );
   }
@@ -832,9 +549,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         _categoryProgressAnimationController.forward();
       }
     });
-    
-    // Load today's timeline from backend
-    _loadTodaysTimeline();
     
     // Set up idle mode timer
     _setupIdleTimer();
@@ -1038,53 +752,65 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   String _getNextHabitName(int nextTransitionMinutes) {
-    if (_timelineEntries.isEmpty) return "Next activity";
-    
-    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    // Convert back to hours and minutes for comparison
+    int hours = nextTransitionMinutes ~/ 60;
+    int minutes = nextTransitionMinutes % 60;
     
     // Handle next day case
-    int searchMinutes = nextTransitionMinutes >= 1440 
-        ? nextTransitionMinutes - 1440 
-        : nextTransitionMinutes;
-    
-    // Find the entry that starts at or after the next transition time
-    for (final entry in sortedEntries) {
-      if (entry.startMinutes >= searchMinutes) {
-        return entry.habitName;
-      }
+    if (hours >= 24) {
+      hours = hours % 24;
     }
     
-    // If we're past all entries, return the first entry of next day
-    if (sortedEntries.isNotEmpty) {
-      return sortedEntries.first.habitName;
-    }
+    // Map transition times to habit names based on current schedule
+    if (hours == 9 && minutes == 0) return "Cold Shower";
+    if (hours == 9 && minutes == 30) return "Morning Quran";
+    if (hours == 9 && minutes == 45) return "Breakfast Time";
+    if (hours == 10 && minutes == 30) return "Deep Focus 1";
+    if (hours == 12 && minutes == 0) return "Guitar Practice";
+    if (hours == 12 && minutes == 20) return "Deep Focus 2";
+    if (hours == 13 && minutes == 30) return "Zuhar Nimaz";
+    if (hours == 13 && minutes == 45) return "Lunch Time";
+    if (hours == 14 && minutes == 30) return "Deep Focus 3";
+    if (hours == 16 && minutes == 0) return "Reset Minute";
+    if (hours == 16 && minutes == 15) return "Deep Focus 4";
+    if (hours == 17 && minutes == 30) return "Asr Nimaz";
+    if (hours == 18 && minutes == 0) return "Chill Time";
+    if (hours == 20 && minutes == 0) return "Hit the Gym";
+    if (hours == 21 && minutes == 0) return "Dinner";
+    if (hours == 23 && minutes == 0) return "Book Reading";
+    if (hours == 2 && minutes == 0) return "Sleep";
     
     return "Next activity";
   }
 
   IconData _getNextHabitIcon(int nextTransitionMinutes) {
-    if (_timelineEntries.isEmpty) return Icons.access_time;
-    
-    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    // Convert back to hours and minutes for comparison
+    int hours = nextTransitionMinutes ~/ 60;
+    int minutes = nextTransitionMinutes % 60;
     
     // Handle next day case
-    int searchMinutes = nextTransitionMinutes >= 1440 
-        ? nextTransitionMinutes - 1440 
-        : nextTransitionMinutes;
-    
-    // Find the entry that starts at or after the next transition time
-    for (final entry in sortedEntries) {
-      if (entry.startMinutes >= searchMinutes) {
-        return _getIconForHabitName(entry.habitName);
-      }
+    if (hours >= 24) {
+      hours = hours % 24;
     }
     
-    // If we're past all entries, return icon for first entry of next day
-    if (sortedEntries.isNotEmpty) {
-      return _getIconForHabitName(sortedEntries.first.habitName);
-    }
+    // Map transition times to icons based on current schedule
+    if (hours == 9 && minutes == 0) return Icons.shower;
+    if (hours == 9 && minutes == 30) return Icons.menu_book;
+    if (hours == 9 && minutes == 45) return Icons.breakfast_dining;
+    if (hours == 10 && minutes == 30) return Icons.work;
+    if (hours == 12 && minutes == 0) return Icons.music_note;
+    if (hours == 12 && minutes == 20) return Icons.work;
+    if (hours == 13 && minutes == 30) return Icons.mosque;
+    if (hours == 13 && minutes == 45) return Icons.lunch_dining;
+    if (hours == 14 && minutes == 30) return Icons.work;
+    if (hours == 16 && minutes == 0) return Icons.refresh;
+    if (hours == 16 && minutes == 15) return Icons.work;
+    if (hours == 17 && minutes == 30) return Icons.mosque;
+    if (hours == 18 && minutes == 0) return Icons.weekend;
+    if (hours == 20 && minutes == 0) return Icons.fitness_center;
+    if (hours == 21 && minutes == 0) return Icons.dinner_dining;
+    if (hours == 23 && minutes == 0) return Icons.book;
+    if (hours == 2 && minutes == 0) return Icons.bedtime;
     
     return Icons.access_time;
   }
@@ -1410,113 +1136,140 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _initializeAudio() {
-    _assetAudioPlayer = AudioPlayer();
-
-    if (!web.isWeb) {
-      return;
-    }
-
     try {
-      _webCabinChime = web.createAudioElement();
-      web.audioSetPreload(_webCabinChime, 'auto');
-      web.audioSetSrc(_webCabinChime, 'assets/assets/sounds/cabin_chime.mp3');
-
-      web.audioOnError(_webCabinChime).listen((event) {
+      // Initialize cabin chime for habit changes
+      _audioElement = html.AudioElement();
+      _audioElement!.preload = 'auto';
+      _audioElement!.src = 'assets/assets/sounds/cabin_chime.mp3';
+      
+      // Initialize completion sounds
+      _completedSoundElement = html.AudioElement();
+      _completedSoundElement!.preload = 'auto';
+      _completedSoundElement!.src = 'assets/assets/sounds/breach_lets_go.mp3';
+      
+      _missedSoundElement = html.AudioElement();
+      _missedSoundElement!.preload = 'auto';
+      _missedSoundElement!.src = 'assets/assets/sounds/it_was_at_this_moment.mp3';
+      
+      _partialSoundElement = html.AudioElement();
+      _partialSoundElement!.preload = 'auto';
+      _partialSoundElement!.src = 'assets/assets/sounds/oh_hell_naw.mp3';
+      
+      // Add error handling for all audio elements
+      _audioElement!.onError.listen((event) {
         print('Cabin chime loading error: $event');
       });
+      
+      _completedSoundElement!.onError.listen((event) {
+        print('Completed sound loading error: $event');
+      });
+      
+      _missedSoundElement!.onError.listen((event) {
+        print('Missed sound loading error: $event');
+      });
+      
+      _partialSoundElement!.onError.listen((event) {
+        print('Partial sound loading error: $event');
+      });
+      
     } catch (e) {
       print('Audio element initialization failed: $e');
     }
   }
 
   void _playAirplaneCallSound() async {
-    if (web.isWeb) {
-      try {
-        if (_audioContext == null) {
-          _audioContext = web.createAudioContext();
-        }
-
-        final state = web.audioContextState(_audioContext);
-        if (!_audioContextResumed && state == 'suspended') {
-          await web.audioContextResume(_audioContext);
-          _audioContextResumed = true;
-          print('AudioContext resumed for cabin chime');
-        }
-
-        if (_webCabinChime != null) {
-          web.audioReset(_webCabinChime);
-          if (web.audioReadyState(_webCabinChime) >= 2) {
-            await web.audioPlay(_webCabinChime);
-            print('Playing cabin chime for habit change');
-            return;
-          }
-
-          return;
-        }
-      } catch (e) {
-        print('Error playing cabin chime: $e');
+    try {
+      // Ensure audio context is resumed (required by browser autoplay policy)
+      if (_audioContext == null) {
+        _audioContext = js.JsObject(js.context['AudioContext']);
+      }
+      
+      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
+        await _audioContext!.callMethod('resume');
+        _audioContextResumed = true;
+        print('AudioContext resumed for cabin chime');
       }
 
-      _playSynthesizedAirplaneSound();
-      return;
-    }
-
-    try {
-      await _assetAudioPlayer.play(AssetSource('sounds/cabin_chime.mp3'));
+      if (_audioElement != null) {
+        _audioElement!.currentTime = 0; // Reset to beginning
+        
+        // Check if audio is ready to play
+        if (_audioElement!.readyState >= 2) { // HAVE_CURRENT_DATA
+          await _audioElement!.play();
+          print('Playing cabin chime for habit change');
+          return; // Success, no need for fallback
+        } else {
+          // If not ready, wait for it to be ready
+          _audioElement!.onCanPlay.first.then((_) async {
+            try {
+              await _audioElement!.play();
+              print('Playing cabin chime for habit change (delayed)');
+            } catch (e) {
+              print('Delayed play error: $e');
+              _playSynthesizedAirplaneSound(); // Fallback to synthesized
+            }
+          });
+          return;
+        }
+      } else {
+        print('Audio element not initialized');
+      }
     } catch (e) {
       print('Error playing cabin chime: $e');
     }
+    
+    // Fallback to synthesized sound
+    _playSynthesizedAirplaneSound();
   }
 
   void _playSynthesizedAirplaneSound() async {
-    if (!web.isWeb) {
-      return;
-    }
-
     try {
+      // Initialize AudioContext if not done yet
       if (_audioContext == null) {
-        _audioContext = web.createAudioContext();
+        _audioContext = js.JsObject(js.context['AudioContext']);
       }
-
-      final state = web.audioContextState(_audioContext);
-      if (!_audioContextResumed && state == 'suspended') {
-        await web.audioContextResume(_audioContext);
+      
+      // Resume AudioContext if it's suspended (required by browser autoplay policy)
+      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
+        await _audioContext!.callMethod('resume');
         _audioContextResumed = true;
         print('AudioContext resumed');
       }
-
-      web.evalJs('''
-        try {
-          var AudioContext = window.AudioContext || window.webkitAudioContext;
-          if (!AudioContext) { return; }
-          window.__amp_fallback_audio_ctx = window.__amp_fallback_audio_ctx || new AudioContext();
-          var ctx = window.__amp_fallback_audio_ctx;
-          if (ctx.state === 'suspended') { ctx.resume(); }
-          var osc1 = ctx.createOscillator();
-          var osc2 = ctx.createOscillator();
-          var gain = ctx.createGain();
-          var t = ctx.currentTime;
-          osc1.type = 'sine';
-          osc1.frequency.setValueAtTime(659.25, t);
-          osc2.type = 'sine';
-          osc2.frequency.setValueAtTime(523.25, t);
-          gain.gain.setValueAtTime(0, t);
-          gain.gain.linearRampToValueAtTime(0.3, t + 0.1);
-          gain.gain.linearRampToValueAtTime(0.2, t + 0.4);
-          gain.gain.linearRampToValueAtTime(0, t + 0.8);
-          osc1.connect(gain);
-          osc2.connect(gain);
-          gain.connect(ctx.destination);
-          osc1.start(t);
-          osc1.stop(t + 0.4);
-          osc2.start(t + 0.4);
-          osc2.stop(t + 0.8);
-        } catch (e) {
-          console.log('Synth sound failed', e);
-        }
-      ''');
-
+      
+      // Create airplane call button sound - two-tone chime
+      final oscillator1 = _audioContext!.callMethod('createOscillator');
+      final oscillator2 = _audioContext!.callMethod('createOscillator');
+      final gainNode = _audioContext!.callMethod('createGain');
+      final currentTime = _audioContext!['currentTime'];
+      
+      // First tone - higher pitch (E note - 659.25 Hz)
+      oscillator1['type'] = 'sine';
+      oscillator1['frequency'].callMethod('setValueAtTime', [659.25, currentTime]);
+      
+      // Second tone - lower pitch (C note - 523.25 Hz) 
+      oscillator2['type'] = 'sine';
+      oscillator2['frequency'].callMethod('setValueAtTime', [523.25, currentTime]);
+      
+      // Gain envelope for smooth sound
+      gainNode['gain'].callMethod('setValueAtTime', [0, currentTime]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.3, currentTime + 0.1]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0.2, currentTime + 0.4]);
+      gainNode['gain'].callMethod('linearRampToValueAtTime', [0, currentTime + 0.8]);
+      
+      // Connect audio nodes
+      oscillator1.callMethod('connect', [gainNode]);
+      oscillator2.callMethod('connect', [gainNode]);
+      gainNode.callMethod('connect', [_audioContext!['destination']]);
+      
+      // Play the two-tone sequence
+      oscillator1.callMethod('start', [currentTime]);
+      oscillator1.callMethod('stop', [currentTime + 0.4]);
+      
+      oscillator2.callMethod('start', [currentTime + 0.4]);
+      oscillator2.callMethod('stop', [currentTime + 0.8]);
+      
       print('Playing synthesized airplane sound');
+      
     } catch (e) {
       print('Error playing synthesized airplane sound: $e');
     }
@@ -1538,11 +1291,54 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _playCompletionSound(HabitState state) async {
-    return;
+    try {
+      // Ensure audio context is resumed
+      if (_audioContext == null) {
+        _audioContext = js.JsObject(js.context['AudioContext']);
+      }
+      
+      if (!_audioContextResumed && _audioContext!['state'] == 'suspended') {
+        await _audioContext!.callMethod('resume');
+        _audioContextResumed = true;
+      }
+
+      html.AudioElement? soundElement;
+      String soundName;
+      
+      switch (state) {
+        case HabitState.completed:
+        case HabitState.onTime:
+          soundElement = _completedSoundElement;
+          soundName = "Let's Go (Completed)";
+          break;
+        case HabitState.missed:
+          soundElement = _missedSoundElement;
+          soundName = "It Was At This Moment (Missed)";
+          break;
+        case HabitState.partial:
+          soundElement = _partialSoundElement;
+          soundName = "Oh Hell Naw (Partial)";
+          break;
+        default:
+          return; // No sound for other states
+      }
+      
+      if (soundElement != null) {
+        soundElement.currentTime = 0; // Reset to beginning
+        await soundElement.play();
+        print('Playing $soundName sound');
+      }
+      
+    } catch (e) {
+      print('Error playing completion sound: $e');
+    }
   }
 
   void _animateProgressUpdate() {
-    // No longer resetting animations - using AnimatedContainer instead
+    _progressAnimationController.reset();
+    _ringAnimationController.reset();
+    _progressAnimationController.forward();
+    _ringAnimationController.forward();
   }
 
   void _updateHabitState(String habit, int dayIndex, HabitState state, TimeOfDay? selectedTime) {
@@ -1570,35 +1366,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _playCompletionSound(state);
   }
 
-  void _updateHabitStateById(String habitId, int dayIndex, HabitState state, TimeOfDay? selectedTime) {
-    // Update habit data keyed by ID (not title) without setState
-    _trackingData[habitId] ??= {};
-    _trackingData[habitId]![_currentWeekKey] ??= {};
-    _trackingData[habitId]![_currentWeekKey]![dayIndex] = state;
-    
-    // Handle time data
-    if (selectedTime != null) {
-      _timeData[habitId] ??= {};
-      _timeData[habitId]![_currentWeekKey] ??= {};
-      _timeData[habitId]![_currentWeekKey]![dayIndex] = selectedTime;
-    } else if (state == HabitState.none || state == HabitState.missed) {
-      _timeData[habitId] ??= {};
-      _timeData[habitId]![_currentWeekKey] ??= {};
-      _timeData[habitId]![_currentWeekKey]![dayIndex] = null;
-    }
-    
-    // Update specific progress values using habit title for lookups
-    final habitTitle = _getHabitTitle(habitId);
-    _updateProgressNotifiers(habitTitle);
-    _animateSpecificProgress(habitTitle);
-    
-    // Play sound for completion states
-    _playCompletionSound(state);
-    
-    // Persist data
-    _saveData();
-  }
-
   void _updateProgressNotifiers(String habit) {
     // Update points notifier
     int currentDayIndex = DateTime.now().weekday - 1;
@@ -1619,39 +1386,18 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     setState(() {});
   }
 
-  void _refreshAllNotifiers() {
-    int currentDayIndex = DateTime.now().weekday - 1;
-    _pointsNotifier.value = _getDailyScore(currentDayIndex);
-    _compoundProgressNotifier.value = _getCompoundProgress(currentDayIndex);
-    
-    Map<String, double> categoryProgress = {};
-    for (String categoryName in _categories.keys) {
-      categoryProgress[categoryName] = _getCategoryProgress(categoryName, currentDayIndex);
-    }
-    _categoryProgressNotifier.value = categoryProgress;
-  }
-
-  bool _isCompletedStatus(CompletionStatus status) {
-    return status == CompletionStatus.completed ||
-        status == CompletionStatus.onTime ||
-        status == CompletionStatus.delayed ||
-        status == CompletionStatus.partial;
-  }
-
   double _getCompoundProgress(int dayIndex) {
+    List<String> compoundHabits = _compoundingHabits.toList();
     int completedCount = 0;
     int totalCount = 0;
     
-    for (final entry in _timelineEntries) {
-      if (!entry.isCompound) {
-        continue;
-      }
-      if (_isHabitDisabledById(entry.habitId, dayIndex)) {
-        continue;
-      }
-      totalCount++;
-      if (_isCompletedStatus(entry.completionStatus)) {
-        completedCount++;
+    for (String habit in compoundHabits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        totalCount++;
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+          completedCount++;
+        }
       }
     }
     
@@ -1659,30 +1405,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   double _getCategoryProgress(String categoryName, int dayIndex) {
-    List<String> habitIds = _categories[categoryName] ?? [];
+    List<String> habits = _categories[categoryName] ?? [];
     int completed = 0;
     int total = 0;
     
-    for (String habitId in habitIds) {
-      if (!_isHabitDisabledById(habitId, dayIndex)) {
+    for (String habit in habits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
         total++;
-        // Check timeline entries for completion status
-        final entry = _timelineEntries.firstWhere(
-          (e) => e.habitId == habitId,
-          orElse: () => Event(
-            id: '',
-            habit: Habit(id: '', title: '', category: ''),
-            startMinutes: 0,
-            durationMinutes: 0,
-            points: 0,
-            completionStatus: CompletionStatus.none,
-          ),
-        );
-        final status = entry.completionStatus;
-        if (status == CompletionStatus.completed || 
-            status == CompletionStatus.onTime || 
-            status == CompletionStatus.delayed || 
-            status == CompletionStatus.partial) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completed++;
         }
       }
@@ -1693,15 +1424,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   void _animateSpecificProgress(String habitName) {
     // Determine which progress sections need to update based on the habit
-    // Look up habit ID from title to check compounding status
-    String? habitId;
-    for (var entry in _habitsMap.entries) {
-      if (entry.value.title == habitName) {
-        habitId = entry.key;
-        break;
-      }
-    }
-    bool updateCompound = habitId != null && _compoundingHabits.contains(habitId);
+    bool updateCompound = _compoundingHabits.contains(habitName);
     bool updateCategory = true; // Categories always update since every habit belongs to one
     
     if (updateCompound) {
@@ -1710,10 +1433,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
     
     if (updateCategory) {
-      // No longer resetting animation - using AnimatedContainer instead
+      _categoryProgressAnimationController.reset();
+      _categoryProgressAnimationController.forward();
     }
     
-    // No longer resetting animation - using AnimatedContainer instead
+    // Always update the main progress (points display)
+    _progressAnimationController.reset();
+    _progressAnimationController.forward();
   }
 
   Future<void> _enableWakeLock() async {
@@ -1732,12 +1458,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _tryWebWakeLock() {
-    if (!web.isWeb) {
-      return;
-    }
-
     try {
-      web.evalJs('''
+      // Try to use the Screen Wake Lock API directly
+      js.context.callMethod('eval', ['''
         if ('wakeLock' in navigator) {
           navigator.wakeLock.request('screen').then(function(wakeLock) {
             console.log('Screen Wake Lock enabled');
@@ -1748,7 +1471,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         } else {
           console.log('Screen Wake Lock API not supported');
         }
-      ''');
+      ''']);
     } catch (e) {
       print('Web wake lock failed: $e');
     }
@@ -1770,34 +1493,31 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   void _disableWebWakeLock() {
-    if (!web.isWeb) {
-      return;
-    }
-
     try {
-      web.evalJs('''
+      js.context.callMethod('eval', ['''
         if (window.wakeLockSentinel) {
           window.wakeLockSentinel.release();
           window.wakeLockSentinel = null;
           console.log('Screen Wake Lock released');
         }
-      ''');
+      ''']);
     } catch (e) {
       print('Failed to release web wake lock: $e');
     }
   }
 
   void _startScreenKeepAlive() {
-    if (!web.isWeb) {
-      return;
-    }
-
+    // Additional method to keep screen active on web
+    // Trigger a minor UI update every 25 seconds to prevent screen sleep
     _screenKeepAliveTimer = Timer.periodic(const Duration(seconds: 25), (timer) {
       if (mounted && _currentView == ViewType.day) {
+        // Multiple fallback methods to keep screen active
         try {
+          // Method 1: Trigger very subtle animation
           _ringAnimationController.forward(from: 0.999);
-
-          web.evalJs('''
+          
+          // Method 2: Create invisible video element to prevent sleep
+          js.context.callMethod('eval', ['''
             if (!window.keepAliveVideo) {
               var video = document.createElement('video');
               video.src = 'data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAACAEFhdGEBAQAAAREAAAABAAAARAAAaGQAABCkAAAQpAAAAAADCOxPcAAAwBQAAAe8AAAABAAAAAEACo/UgEwEAABGaBgn40AE=';
@@ -1810,7 +1530,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               video.play().catch(function(e) { console.log('Video play failed:', e); });
               window.keepAliveVideo = video;
             }
-          ''');
+          ''']);
         } catch (e) {
           print('Keep-alive fallback failed: $e');
         }
@@ -1822,22 +1542,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   void _stopScreenKeepAlive() {
     _screenKeepAliveTimer?.cancel();
     _screenKeepAliveTimer = null;
-
-    if (!web.isWeb) {
-      return;
-    }
-
+    
+    // Clean up video element
     try {
-      web.evalJs('''
+      js.context.callMethod('eval', ['''
         if (window.keepAliveVideo) {
           window.keepAliveVideo.remove();
           window.keepAliveVideo = null;
         }
-      ''');
+      ''']);
     } catch (e) {
       print('Failed to clean up keep-alive video: $e');
     }
-
+    
     print('Screen keep-alive timer stopped');
   }
 
@@ -1979,308 +1696,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     }
   }
 
-  String _formatDateForApi(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  bool _isSelectedDateToday() {
-    final now = DateTime.now();
-    return _timelineSelectedDate.year == now.year &&
-           _timelineSelectedDate.month == now.month &&
-           _timelineSelectedDate.day == now.day;
-  }
-
-  String _formatSelectedDateLabel() {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    final weekday = weekdays[_timelineSelectedDate.weekday - 1];
-    return '$weekday, ${months[_timelineSelectedDate.month - 1]} ${_timelineSelectedDate.day}';
-  }
-
-  String _formatFullDate() {
-    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    final weekday = weekdays[_timelineSelectedDate.weekday - 1];
-    final day = _timelineSelectedDate.day;
-    final month = months[_timelineSelectedDate.month - 1];
-    
-    // Add ordinal suffix (1st, 2nd, 3rd, etc.)
-    String suffix;
-    if (day >= 11 && day <= 13) {
-      suffix = 'th';
-    } else {
-      switch (day % 10) {
-        case 1:
-          suffix = 'st';
-          break;
-        case 2:
-          suffix = 'nd';
-          break;
-        case 3:
-          suffix = 'rd';
-          break;
-        default:
-          suffix = 'th';
-      }
-    }
-    
-    return '$weekday $day$suffix of $month';
-  }
-
-  Widget _buildSelectedDateWidget() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            const Color(0xFF2A2D3A),
-            const Color(0xFF1E212E).withValues(alpha: 0.95),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _isSelectedDateToday() 
-            ? const Color(0xFF58A6FF).withValues(alpha: 0.3)
-            : Colors.white.withValues(alpha: 0.1),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: _isSelectedDateToday()
-                ? const Color(0xFF58A6FF).withValues(alpha: 0.15)
-                : const Color(0xFFFF9F0A).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.calendar_today_rounded,
-              color: _isSelectedDateToday() 
-                ? const Color(0xFF58A6FF)
-                : const Color(0xFFFF9F0A),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_isSelectedDateToday())
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    margin: const EdgeInsets.only(bottom: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF30D158).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'TODAY',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF30D158),
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                Text(
-                  _formatFullDate(),
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.95),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _loadTodaysTimeline() async {
-    setState(() {
-      _isLoadingTimeline = true;
-      _isLoadingCategories = true;
-    });
-    try {
-      // Load habits, categories, and compound habits in parallel
-      final results = await Future.wait([
-        ApiService.getHabits(),
-        ApiService.getCategories(),
-        ApiService.getUserCompoundHabits(_currentUserId),
-      ]);
-      
-      final habits = results[0] as List<Habit>;
-      final categories = results[1] as List<String>;
-      final compoundHabitIds = results[2] as List<String>;
-      
-      _habitsMap = {for (var h in habits) h.id: h};
-      _categoryList = categories;
-      _userCompoundHabitIds = compoundHabitIds.toSet();
-      
-      // Build _categories map from habits (using habit IDs, not titles)
-      _categories = {};
-      for (var habit in habits) {
-        if (!_categories.containsKey(habit.category)) {
-          _categories[habit.category] = [];
-        }
-        _categories[habit.category]!.add(habit.id);
-      }
-      
-      // Initialize colors and habit sets
-      _initializeCategoryColors();
-      _initializeHabitSets();
-
-      final dateStr = _formatDateForApi(_timelineSelectedDate);
-      final timeline = await ApiService.getTimelineByDate(_currentUserId, dateStr);
-      
-      setState(() {
-        _currentTimeline = timeline;
-        _timelineEntries = timeline?.entries ?? [];
-        _isLoadingTimeline = false;
-        _isLoadingCategories = false;
-      });
-      
-      // Update notifiers now that _habitsMap is loaded
-      _refreshAllNotifiers();
-    } catch (e) {
-      print('Error loading timeline: $e');
-      setState(() {
-        _isLoadingTimeline = false;
-        _isLoadingCategories = false;
-      });
-    }
-  }
-
-  Future<void> _updateTimelineEntryStatus(TimelineEntry entry, CompletionStatus status) async {
-    if (_currentTimeline == null) return;
-    
-    // Optimistic UI update - update immediately before API call
-    final entryIndex = _timelineEntries.indexWhere((e) => e.id == entry.id);
-    if (entryIndex != -1) {
-      setState(() {
-        _timelineEntries[entryIndex] = entry.copyWith(completionStatus: status);
-      });
-    }
-
-    // Immediately update Weekly Momentum with optimistic data
-    momentumRefreshNotifier.updateTodayPoints(_timelineEntries);
-
-    // Play sound for completion states
-    _playCompletionSound(_completionStatusToHabitState(status));
-    
-    try {
-      final updatedTimeline = await ApiService.updateEntryStatus(
-        timelineId: _currentTimeline!.id,
-        entryId: entry.id,
-        status: _completionStatusToString(status),
-      );
-      
-      // Sync with server data without replacing the entire list to avoid
-      // widget-tree flicker. Only trigger a rebuild if the server returned
-      // data that differs from our optimistic update.
-      _currentTimeline = updatedTimeline;
-      final serverEntries = updatedTimeline.entries;
-      bool needsRebuild = false;
-
-      // Check if server data differs from our optimistic state
-      if (serverEntries.length != _timelineEntries.length) {
-        needsRebuild = true;
-      } else {
-        for (int i = 0; i < serverEntries.length; i++) {
-          final local = _timelineEntries.indexWhere((e) => e.id == serverEntries[i].id);
-          if (local == -1 ||
-              _timelineEntries[local].completionStatus != serverEntries[i].completionStatus ||
-              _timelineEntries[local].points != serverEntries[i].points) {
-            needsRebuild = true;
-            break;
-          }
-        }
-      }
-
-      if (needsRebuild) {
-        setState(() {
-          _timelineEntries = serverEntries;
-        });
-      }
-
-      // Refresh contests and momentum to show updated scores
-      contestRefreshNotifier.refresh();
-      momentumRefreshNotifier.updateTodayPoints(_timelineEntries);
-      
-      // Sync with habit tracking state using habit ID for consistency
-      final habitId = entry.habitId;
-      if (habitId.isNotEmpty) {
-        final habitState = _completionStatusToHabitState(status);
-        final dayIndex = DateTime.now().weekday - 1;
-        _updateHabitStateById(habitId, dayIndex, habitState, null);
-      }
-    } catch (e) {
-      print('Error updating entry status: $e');
-      // Revert optimistic update on error
-      if (entryIndex != -1) {
-        setState(() {
-          _timelineEntries[entryIndex] = entry;
-        });
-        momentumRefreshNotifier.updateTodayPoints(_timelineEntries);
-      }
-    }
-  }
-  
-  HabitState _completionStatusToHabitState(CompletionStatus status) {
-    switch (status) {
-      case CompletionStatus.onTime:
-      case CompletionStatus.completed:
-        return HabitState.completed;
-      case CompletionStatus.delayed:
-      case CompletionStatus.partial:
-        return HabitState.partial;
-      case CompletionStatus.missed:
-        return HabitState.missed;
-      case CompletionStatus.avoided:
-        return HabitState.avoided;
-      case CompletionStatus.none:
-      default:
-        return HabitState.none;
-    }
-  }
-
-  String _completionStatusToString(CompletionStatus status) {
-    switch (status) {
-      case CompletionStatus.onTime:
-        return 'onTime';
-      case CompletionStatus.delayed:
-        return 'delayed';
-      case CompletionStatus.partial:
-        return 'partial';
-      case CompletionStatus.completed:
-        return 'completed';
-      case CompletionStatus.missed:
-        return 'missed';
-      case CompletionStatus.avoided:
-        return 'avoided';
-      case CompletionStatus.none:
-      default:
-        return 'none';
-    }
-  }
-
   bool _shouldShowContributionGraph() {
     return false; // Hidden for now
   }
@@ -2317,207 +1732,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     _saveData(); // Save current week
   }
 
-  Widget? _buildFloatingActionButtons() {
-    if (_currentView != ViewType.day) return null;
-    
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FloatingActionButton(
-          onPressed: _showDatePicker,
-          tooltip: 'Select Date',
-          backgroundColor: const Color(0xFF58A6FF),
-          heroTag: "datePicker",
-          child: const Icon(Icons.calendar_today),
-        ),
-        const SizedBox(height: 10),
-        FloatingActionButton(
-          onPressed: () {
-            Navigator.push(
-              context,
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) => 
-                    TimelineScreen(userId: _currentUserId),
-                transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-              ),
-            ).then((_) => _loadTodaysTimeline());
-          },
-          tooltip: 'Daily Timeline',
-          backgroundColor: Colors.green,
-          heroTag: "timeline",
-          child: const Icon(Icons.timeline),
-        ),
-        const SizedBox(height: 10),
-        FloatingActionButton(
-          onPressed: _playAirplaneCallSound,
-          tooltip: 'Test Habit Change Sound',
-          backgroundColor: Colors.blue,
-          heroTag: "sound",
-          child: const Icon(Icons.volume_up),
-        ),
-        const SizedBox(height: 10),
-        FloatingActionButton(
-          onPressed: _handleLogout,
-          tooltip: 'Logout',
-          backgroundColor: Colors.redAccent,
-          heroTag: "logout",
-          child: const Icon(Icons.logout),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _showDatePicker() async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _timelineSelectedDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF58A6FF),
-              surface: Color(0xFF161B22),
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null && picked != _timelineSelectedDate) {
-      setState(() {
-        _timelineSelectedDate = picked;
-      });
-      _loadTodaysTimeline();
-    }
-  }
-
-  void _showSettingsMenu(BuildContext context) {
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(
-          MediaQuery.of(context).size.width - 200,
-          MediaQuery.of(context).size.height - 300,
-          0,
-          0,
-        ),
-        Offset.zero & overlay.size,
-      ),
-      items: [
-        const PopupMenuItem(
-          value: 'timeline',
-          child: Row(
-            children: [
-              Icon(Icons.schedule, size: 20),
-              SizedBox(width: 12),
-              Text('Daily Timeline'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'habits',
-          child: Row(
-            children: [
-              Icon(Icons.list_alt, size: 20),
-              SizedBox(width: 12),
-              Text('Manage Habits'),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: 'panels',
-          child: Row(
-            children: [
-              Icon(Icons.dashboard, size: 20),
-              SizedBox(width: 12),
-              Text('Configure Panels'),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'timelines',
-          child: Row(
-            children: [
-              Icon(Icons.tune, size: 20),
-              SizedBox(width: 12),
-              Text('Configure Timelines'),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        const PopupMenuItem(
-          value: 'logout',
-          child: Row(
-            children: [
-              Icon(Icons.logout, size: 20, color: Colors.redAccent),
-              SizedBox(width: 12),
-              Text('Logout', style: TextStyle(color: Colors.redAccent)),
-            ],
-          ),
-        ),
-      ],
-    ).then((value) {
-      if (value == 'timeline') {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => TimelineScreen(userId: _currentUserId)),
-        ).then((_) => _loadTodaysTimeline());
-      } else if (value == 'habits') {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const HabitListScreen()),
-        );
-      } else if (value == 'panels') {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const PanelConfigScreen()),
-        );
-      } else if (value == 'timelines') {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const TimelineConfigScreen()),
-        );
-      } else if (value == 'logout') {
-        _handleLogout();
-      }
-    });
-  }
-
-  Future<void> _handleLogout() async {
-    await AuthService.signOut();
-    if (mounted) {
-      Navigator.of(context).pushAndRemoveUntil(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => LoginScreen(
-            onLoginSuccess: () {
-              Navigator.of(context).pushReplacement(
-                PageRouteBuilder(
-                  pageBuilder: (context, animation, secondaryAnimation) => const DailyTrackerHome(),
-                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: const Duration(milliseconds: 300),
-                ),
-              );
-            },
-          ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 300),
-        ),
-        (route) => false,
-      );
-    }
-  }
-
   PreferredSizeWidget _buildAppBar() {
     String title = _getViewTitle();
     return AppBar(
@@ -2549,110 +1763,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(width: 8),
         ],
         _buildViewSelector(),
-        const SizedBox(width: 8),
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.settings),
-          tooltip: 'Settings',
-          onSelected: (value) {
-            if (value == 'timeline') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => TimelineScreen(userId: _currentUserId)),
-              ).then((_) => _loadTodaysTimeline());
-            } else if (value == 'habits') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const HabitListScreen()),
-              );
-            } else if (value == 'panels') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PanelConfigScreen()),
-              );
-            } else if (value == 'timelines') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const TimelineConfigScreen()),
-              );
-            } else if (value == 'social') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SocialSettingsScreen()),
-              );
-            } else if (value == 'glass_dashboard') {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const GlassDashboardScreen()),
-              );
-            }
-          },
-          itemBuilder: (context) => [
-            if (kDebugMode) ...[
-              const PopupMenuItem(
-                value: 'glass_dashboard',
-                child: Row(
-                  children: [
-                    Icon(Icons.auto_awesome, size: 20, color: Color(0xFF22D3EE)),
-                    SizedBox(width: 12),
-                    Text('Glass Dashboard ✨', style: TextStyle(color: Color(0xFF22D3EE))),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-            ],
-            const PopupMenuItem(
-              value: 'timeline',
-              child: Row(
-                children: [
-                  Icon(Icons.schedule, size: 20),
-                  SizedBox(width: 12),
-                  Text('Daily Timeline'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'habits',
-              child: Row(
-                children: [
-                  Icon(Icons.list_alt, size: 20),
-                  SizedBox(width: 12),
-                  Text('Manage Habits'),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
-            const PopupMenuItem(
-              value: 'panels',
-              child: Row(
-                children: [
-                  Icon(Icons.dashboard, size: 20),
-                  SizedBox(width: 12),
-                  Text('Configure Panels'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'timelines',
-              child: Row(
-                children: [
-                  Icon(Icons.tune, size: 20),
-                  SizedBox(width: 12),
-                  Text('Configure Timelines'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'social',
-              child: Row(
-                children: [
-                  Icon(Icons.share, size: 20),
-                  SizedBox(width: 12),
-                  Text('Social & Integrations'),
-                ],
-              ),
-            ),
-          ],
-        ),
         const SizedBox(width: 16),
       ],
     );
@@ -3031,29 +2141,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildMobileDashboard(int todayIndex, int currentScore, int maxScore, double percentage) {
-    final children = <Widget>[
-      _buildTodaysFocusSection(todayIndex),
-      const SizedBox(height: 24),
-      if (isIOS) ...[
-        _buildYourProgressSection(dayIndex: todayIndex, currentScore: currentScore),
-        const SizedBox(height: 24),
-        const WeeklyMomentumWidget(),
-      ] else ...[
-        const WeeklyMomentumWidget(),
-        const SizedBox(height: 24),
-        _buildYourProgressSection(dayIndex: todayIndex, currentScore: currentScore),
-      ],
-    ];
-
     return ListView(
-      padding: EdgeInsets.fromLTRB(16, isIOS ? 32 : 16, 16, isIOS ? 72 : 32),
-      children: children,
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildTodaysFocusSection(todayIndex),
+        const SizedBox(height: 24),
+        _buildYourProgressSection(todayIndex, currentScore),
+      ],
     );
   }
 
   Widget _buildTabletDashboard(int todayIndex, int currentScore) {
     return Padding(
-      padding: const EdgeInsets.only(left: 24, top: 24, bottom: 24, right: 88),
+      padding: const EdgeInsets.all(24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3074,7 +2174,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Expanded(
             flex: 3,
             child: SingleChildScrollView(
-              child: _buildYourProgressSection(dayIndex: todayIndex, currentScore: currentScore),
+              child: _buildYourProgressSection(todayIndex, currentScore),
             ),
           ),
         ],
@@ -3098,11 +2198,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
-          const WeeklyMomentumWidget(),
-          const SizedBox(height: 24),
           _buildAppleFitnessStyleCard(dayIndex),
           const SizedBox(height: 24),
-          _buildCategoryProgressSection(dayIndex),
+          _buildActivityRingsWidget(dayIndex),
+          const SizedBox(height: 24),
+          _buildWeeklyStreakCard(),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -3112,14 +2213,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return ValueListenableBuilder<Map<String, double>>(
       valueListenable: _categoryProgressNotifier,
       builder: (context, categoryProgressMap, child) {
-        // Get up to 3 categories for the activity rings
-        final displayCategories = _categoryList.take(3).toList();
-        final progressValues = displayCategories.map((cat) => 
-          categoryProgressMap[cat] ?? _getCategoryProgress(cat, dayIndex)
-        ).toList();
-        
-        final totalProgress = progressValues.isEmpty ? 0.0 : 
-          progressValues.reduce((a, b) => a + b) / progressValues.length;
+        final deenProgress = categoryProgressMap['Akhirat'] ?? _getCategoryProgress('Akhirat', dayIndex);
+        final personalProgress = categoryProgressMap['Personal'] ?? _getCategoryProgress('Personal', dayIndex);
+        final healthProgress = categoryProgressMap['Health'] ?? _getCategoryProgress('Health', dayIndex);
+        final totalProgress = (deenProgress + personalProgress + healthProgress) / 3;
     
     return Container(
       padding: const EdgeInsets.all(28),
@@ -3208,21 +2305,36 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // Build rings dynamically for up to 3 categories
-                      ...List.generate(displayCategories.length.clamp(0, 3), (i) {
-                        final radii = [60.0, 46.0, 32.0];
-                        final color = _getCategoryColor(displayCategories[i]);
-                        return AnimatedBuilder(
-                          animation: _ringAnimation,
-                          builder: (context, child) => _buildEnhancedActivityRing(
-                            radius: radii[i],
-                            strokeWidth: 9,
-                            progress: progressValues[i] * _ringAnimation.value,
-                            color: color,
-                            glowColor: color.withValues(alpha: 0.4),
-                          ),
-                        );
-                      }),
+                      AnimatedBuilder(
+                        animation: _ringAnimation,
+                        builder: (context, child) => _buildEnhancedActivityRing(
+                          radius: 60,
+                          strokeWidth: 9,
+                          progress: deenProgress * _ringAnimation.value,
+                          color: const Color(0xFFFF453A),
+                          glowColor: const Color(0xFFFF453A).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      AnimatedBuilder(
+                        animation: _ringAnimation,
+                        builder: (context, child) => _buildEnhancedActivityRing(
+                          radius: 46,
+                          strokeWidth: 9,
+                          progress: personalProgress * _ringAnimation.value,
+                          color: const Color(0xFF30D158),
+                          glowColor: const Color(0xFF30D158).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      AnimatedBuilder(
+                        animation: _ringAnimation,
+                        builder: (context, child) => _buildEnhancedActivityRing(
+                          radius: 32,
+                          strokeWidth: 9,
+                          progress: healthProgress * _ringAnimation.value,
+                          color: const Color(0xFF00C7BE),
+                          glowColor: const Color(0xFF00C7BE).withValues(alpha: 0.4),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -3233,9 +2345,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 children: [
                   // Animated points with sparkle effect
                   TweenAnimationBuilder<double>(
-                    duration: const Duration(milliseconds: 600),
-                    curve: Curves.easeOutCubic,
-                    tween: Tween(begin: _getDailyScore(dayIndex).toDouble(), end: _getDailyScore(dayIndex).toDouble()),
+                    duration: const Duration(milliseconds: 800),
+                    tween: Tween(begin: 0, end: _getDailyScore(dayIndex).toDouble()),
                     builder: (context, animatedScore, child) => Row(
                       children: [
                         Text(
@@ -3276,19 +2387,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     ),
                   ),
                   const SizedBox(height: 12),
-                  // Progress indicators - dynamically built
+                  // Progress indicators
                   Column(
                     children: [
-                      ...displayCategories.asMap().entries.map((entry) => 
-                        Padding(
-                          padding: EdgeInsets.only(bottom: entry.key < displayCategories.length - 1 ? 6 : 0),
-                          child: _buildProgressIndicator(
-                            entry.value, 
-                            progressValues[entry.key], 
-                            _getCategoryColor(entry.value)
-                          ),
-                        )
-                      ),
+                      _buildProgressIndicator('Akhirat', deenProgress, const Color(0xFFFF453A)),
+                      const SizedBox(height: 6),
+                      _buildProgressIndicator('Personal', personalProgress, const Color(0xFF30D158)),
+                      const SizedBox(height: 6),
+                      _buildProgressIndicator('Health', healthProgress, const Color(0xFF00C7BE)),
                       const SizedBox(height: 12),
                       _buildKeywordsCard(),
                     ],
@@ -3304,34 +2410,324 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
+  Widget _buildWeeklyStreakCard() {
+    int bestDailyScore = _getBestDailyScore();
+    int todayScore = _getDailyScore(DateTime.now().weekday == 7 ? 6 : DateTime.now().weekday - 1);
+    bool achievedBest = todayScore >= bestDailyScore && todayScore > 0;
+    
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.85),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFD700), Color(0xFFFF9F0A)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  achievedBest ? Icons.emoji_events : Icons.workspace_premium,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'PERSONAL RECORDS',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              if (achievedBest)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFD700).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Text(
+                    'NEW RECORD!',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFFFD700),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: _buildRecordItem(
+                  value: bestDailyScore,
+                  label: 'BEST DAILY SCORE',
+                  icon: Icons.star,
+                  color: const Color(0xFFFFD700),
+                  isHighlighted: achievedBest,
+                ),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: _buildRecordItem(
+                  value: bestDailyScore > todayScore ? bestDailyScore - todayScore : 0,
+                  label: 'BEAT RECORD',
+                  icon: Icons.trending_up,
+                  color: const Color(0xFF007AFF),
+                  isHighlighted: false,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (achievedBest)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFFFD700).withValues(alpha: 0.1),
+                    const Color(0xFFFF9F0A).withValues(alpha: 0.05),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  TweenAnimationBuilder<double>(
+                    duration: const Duration(seconds: 2),
+                    tween: Tween(begin: 0.8, end: 1.2),
+                    curve: Curves.elasticOut,
+                    builder: (context, scale, child) => Transform.scale(
+                      scale: scale,
+                      child: Icon(
+                        Icons.celebration,
+                        color: const Color(0xFFFFD700),
+                        size: 24,
+                      ),
+                    ),
+                    onEnd: () => setState(() {}),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Congratulations!',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFFFD700),
+                          ),
+                        ),
+                        Text(
+                          'You achieved your personal best today!',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordItem({
+    required int value,
+    required String label,
+    required IconData icon,
+    required Color color,
+    required bool isHighlighted,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isHighlighted 
+          ? color.withValues(alpha: 0.15)
+          : color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isHighlighted 
+            ? color.withValues(alpha: 0.4)
+            : color.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: color,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 1000),
+                tween: Tween(begin: 0, end: value.toDouble()),
+                builder: (context, animatedValue, child) => Text(
+                  '${animatedValue.toInt()}',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: color.withValues(alpha: 0.8),
+              letterSpacing: 0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _getBestDailyScore() {
+    int bestScore = 0;
+    
+    // Get all week keys from any habit's data
+    Set<String> allWeekKeys = {};
+    for (var habitWeeks in _trackingData.values) {
+      allWeekKeys.addAll(habitWeeks.keys);
+    }
+    
+    // Check each week and each day
+    for (String weekKey in allWeekKeys) {
+      for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+        int dayScore = 0;
+        
+        // Calculate total score for this specific day
+        for (var category in _categories.entries) {
+          for (String habit in category.value) {
+            if (!_isHabitDisabled(habit, dayIndex)) {
+              HabitState? state = _trackingData[habit]?[weekKey]?[dayIndex];
+              if (state != null) {
+                int points = _getHabitPoints(habit, state, dayIndex);
+                dayScore += points;
+              }
+            }
+          }
+        }
+        
+        if (dayScore > bestScore) {
+          bestScore = dayScore;
+        }
+      }
+    }
+    
+    return bestScore;
+  }
+
+
   Widget _buildQuickStatsCard(int dayIndex) {
     int totalCompleted = 0;
     int totalHabits = 0;
     int onTimeHabits = 0;
     int partialHabits = 0;
     
-    // Use timeline entries (schedule data) for stats
-    totalHabits = _timelineEntries.length;
-    for (var entry in _timelineEntries) {
-      final status = entry.completionStatus;
-      if (status == CompletionStatus.completed || 
-          status == CompletionStatus.onTime || 
-          status == CompletionStatus.delayed || 
-          status == CompletionStatus.partial ||
-          status == CompletionStatus.avoided) {
-        totalCompleted++;
-        if (status == CompletionStatus.onTime) onTimeHabits++;
-        if (status == CompletionStatus.partial) partialHabits++;
+    for (var category in _categories.entries) {
+      for (String habit in category.value) {
+        if (!_isHabitDisabled(habit, dayIndex)) {
+          totalHabits++;
+          HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+          if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+            totalCompleted++;
+            if (state == HabitState.onTime) onTimeHabits++;
+            if (state == HabitState.partial) partialHabits++;
+          }
+        }
       }
     }
     
     double completionRate = totalHabits > 0 ? totalCompleted / totalHabits : 0.0;
     
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(14),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFF2A2D3A),
+            const Color(0xFF1E212E).withValues(alpha: 0.85),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3339,9 +2735,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           Row(
             children: [
               Text(
-                '${(AuthService.currentUser?.name.split(' ').first ?? AuthService.currentUser?.name ?? 'TODAY').toUpperCase()}\'S PERFORMANCE',
+                'TODAY\'S PERFORMANCE',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Colors.white.withValues(alpha: 0.7),
                   letterSpacing: 0.8,
@@ -3382,7 +2778,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           // Main completion stats
           Row(
             children: [
@@ -3394,7 +2790,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   icon: Icons.check_circle,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 20),
               Expanded(
                 child: _buildStatItem(
                   value: totalHabits - totalCompleted,
@@ -3405,7 +2801,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
           // Completion rate indicator
           Row(
             children: [
@@ -3416,20 +2812,19 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                     Row(
                       children: [
                         TweenAnimationBuilder<double>(
-                          duration: const Duration(milliseconds: 600),
-                          curve: Curves.easeOutCubic,
-                          tween: Tween(begin: completionRate * 100, end: completionRate * 100),
+                          duration: const Duration(milliseconds: 1000),
+                          tween: Tween(begin: 0, end: completionRate * 100),
                           builder: (context, animatedRate, child) => Text(
                             '${animatedRate.toInt()}%',
                             style: const TextStyle(
-                              fontSize: 22,
+                              fontSize: 28,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                               letterSpacing: -1,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 8),
                         TweenAnimationBuilder<double>(
                           duration: const Duration(seconds: 2),
                           tween: Tween(begin: 0.7, end: 1.0),
@@ -3439,7 +2834,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                             child: Icon(
                               completionRate >= 0.8 ? Icons.celebration : Icons.trending_up,
                               color: completionRate >= 0.8 ? const Color(0xFFFFD700) : const Color(0xFF00C7BE),
-                              size: 16,
+                              size: 20,
                             ),
                           ),
                           onEnd: () => setState(() {}),
@@ -3459,21 +2854,20 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 20),
               // Progress bar
               Expanded(
                 child: Column(
                   children: [
                     Container(
-                      height: 6,
+                      height: 8,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: TweenAnimationBuilder<double>(
-                        duration: const Duration(milliseconds: 600),
-                        curve: Curves.easeOutCubic,
-                        tween: Tween(begin: completionRate, end: completionRate),
+                        duration: const Duration(milliseconds: 1200),
+                        tween: Tween(begin: 0, end: completionRate),
                         builder: (context, animatedProgress, child) => LinearProgressIndicator(
                           value: animatedProgress,
                           backgroundColor: Colors.transparent,
@@ -3501,114 +2895,8 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          // Time Distribution Pie Chart
-          if (_timelineEntries.isNotEmpty) ...[
-            SizedBox(height: isIOS ? 20 : 16),
-            Container(
-              width: double.infinity,
-              height: 1,
-              color: Colors.white.withValues(alpha: 0.1),
-            ),
-            SizedBox(height: isIOS ? 20 : 16),
-            _buildInlinePieChart(),
-            SizedBox(height: isIOS ? 8 : 0),
-          ],
         ],
       ),
-    );
-  }
-
-  Widget _buildInlinePieChart() {
-    final userId = AuthService.currentUser?.id ?? '';
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.pie_chart_rounded,
-                  color: const Color(0xFF6366F1),
-                  size: 16,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'TIME DISTRIBUTION',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.7),
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => DailyInsightsScreen(
-                      userId: userId,
-                      initialDate: _timelineSelectedDate,
-                    ),
-                  ),
-                );
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Details',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF6366F1),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    size: 10,
-                    color: Color(0xFF6366F1),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Center(
-          child: Builder(
-            builder: (context) {
-              final now = DateTime.now();
-              final todayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
-              return CategoryPieChart(
-                entries: _timelineEntries,
-                size: isIOS ? 110 : 140,
-                centerSpaceRadius: isIOS ? 28 : 35,
-                showLegend: false,
-                currentScore: _getDailyScore(todayIndex),
-                maxScore: _getMaxDailyScoreForDay(todayIndex),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DailyInsightsScreen(
-                        userId: userId,
-                        initialDate: _timelineSelectedDate,
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 
@@ -3623,24 +2911,42 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         });
       },
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A2E),
-          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              const Color(0xFF2A2D3A),
+              const Color(0xFF1E212E).withValues(alpha: 0.85),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.25),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [
             // Left side - Icon
             Container(
-              width: 40,
-              height: 40,
+              width: 50,
+              height: 50,
               decoration: BoxDecoration(
                 color: const Color(0xFF5856D6),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFF5856D6).withValues(alpha: 0.3),
-                    blurRadius: 6,
+                    blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
                 ],
@@ -3648,11 +2954,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               child: Icon(
                 Icons.visibility,
                 color: Colors.white,
-                size: 20,
+                size: 24,
               ),
             ),
             
-            const SizedBox(width: 12),
+            const SizedBox(width: 16),
             
             // Right side - Description
             Expanded(
@@ -3662,17 +2968,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                   Text(
                     'Focus Mode',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: Colors.white.withValues(alpha: 0.9),
                       letterSpacing: 0.3,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     'View current habit in full screen focus',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: Colors.white.withValues(alpha: 0.6),
                       letterSpacing: 0.2,
                     ),
@@ -3700,10 +3006,10 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: color.withValues(alpha: 0.2),
         ),
@@ -3716,17 +3022,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               Icon(
                 icon,
                 color: color,
-                size: 14,
+                size: 16,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
               TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 600),
-                curve: Curves.easeOutCubic,
-                tween: Tween(begin: value.toDouble(), end: value.toDouble()),
+                duration: const Duration(milliseconds: 800),
+                tween: Tween(begin: 0, end: value.toDouble()),
                 builder: (context, animatedValue, child) => Text(
                   '${animatedValue.toInt()}',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: color,
                   ),
@@ -3734,11 +3039,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             label,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: color.withValues(alpha: 0.8),
               letterSpacing: 0.5,
@@ -3750,558 +3055,52 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildTodaysFocusSection(int dayIndex) {
+    final focusCategories = [
+      {'name': 'Akhirat', 'color': const Color(0xFFFF453A)},
+      {'name': 'Personal', 'color': const Color(0xFF30D158)},
+      {'name': 'Professional', 'color': const Color(0xFF007AFF)},
+      {'name': 'Health', 'color': const Color(0xFF00C7BE)},
+      {'name': 'Sleep Tracking', 'color': const Color(0xFF5856D6)},
+    ];
+
     return Container(
-      padding: const EdgeInsets.only(bottom: 16), // Add bottom padding for better scrolling
+      padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.only(left: widget.showSidebar ? 24 : 0),
-            child: Row(
-              children: [
-                Text(
-                  'TODAY\'S FOCUS',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    _formatFullDate(),
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF58A6FF),
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-              ],
+          Text(
+            'TODAY\'S FOCUS',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildQuickStatsCard(dayIndex),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           _buildScreensaverButton(),
-          const SizedBox(height: 16),
-          // Timeline entries from backend - organized by time slot (only entries with points)
-          if (_timelineEntries.any((e) => e.points > 0)) ...[
-            _buildTimeSlotSection(),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimeSlotSection() {
-    // Sort timeline entries by start time, only show entries with points
-    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
-    final pointsEntries = sortedEntries.where((e) => e.points > 0).toList();
-    
-    // Group entries by time periods
-    final morningEntries = pointsEntries.where((e) => e.startMinutes < 720).toList(); // Before 12:00
-    final afternoonEntries = pointsEntries.where((e) => e.startMinutes >= 720 && e.startMinutes < 1080).toList(); // 12:00-18:00
-    final eveningEntries = pointsEntries.where((e) => e.startMinutes >= 1080).toList(); // After 18:00
-    
-    // Determine current time section
-    final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
-    
-    String currentSection;
-    if (currentMinutes < 720) {
-      currentSection = 'Morning';
-    } else if (currentMinutes < 1080) {
-      currentSection = 'Afternoon';
-    } else {
-      currentSection = 'Evening';
-    }
-    
-    // Build ordered list of sections (current section first)
-    final sections = <Map<String, dynamic>>[];
-    final allSections = [
-      {'name': 'Morning', 'entries': morningEntries, 'color': const Color(0xFFFFD60A)},
-      {'name': 'Afternoon', 'entries': afternoonEntries, 'color': const Color(0xFFFF9F0A)},
-      {'name': 'Evening', 'entries': eveningEntries, 'color': const Color(0xFF5856D6)},
-    ];
-    
-    // Add current section first
-    for (var section in allSections) {
-      if (section['name'] == currentSection) {
-        sections.insert(0, section);
-      } else {
-        sections.add(section);
-      }
-    }
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF9F0A),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                _isSelectedDateToday() ? 'Today\'s Schedule' : _formatSelectedDateLabel(),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 16),
-                color: Colors.white.withValues(alpha: 0.6),
-                onPressed: _loadTodaysTimeline,
-                tooltip: 'Refresh Timeline',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_isLoadingTimeline)
-            const Center(child: CircularProgressIndicator())
-          else
-            ...sections.map((section) {
-              final name = section['name'] as String;
-              final entries = section['entries'] as List<TimelineEntry>;
-              final color = section['color'] as Color;
-              final isCurrent = name == currentSection;
-              final isExpanded = isCurrent || (_scheduleSectionExpanded[name] ?? false);
-              
-              return _buildCollapsibleSection(
-                name: name,
-                entries: entries,
-                color: color,
-                isCurrent: isCurrent,
-                isExpanded: isExpanded,
-              );
-            }),
-        ],
-      ),
-    );
-  }
-  
-  Widget _buildCollapsibleSection({
-    required String name,
-    required List<TimelineEntry> entries,
-    required Color color,
-    required bool isCurrent,
-    required bool isExpanded,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: isCurrent ? null : () {
-            setState(() {
-              _scheduleSectionExpanded[name] = !(_scheduleSectionExpanded[name] ?? false);
-            });
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
-                ),
-                if (isCurrent) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'NOW',
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                Text(
-                  '${entries.length}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white.withValues(alpha: 0.4),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                if (!isCurrent)
-                  Icon(
-                    isExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: Colors.white.withValues(alpha: 0.4),
-                  ),
-              ],
-            ),
-          ),
-        ),
-        if (isExpanded) ...[
-          if (entries.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 8),
-              child: Text(
-                'No entries',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.3),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
+          const SizedBox(height: 24),
+          ...focusCategories.map((category) => 
+            _buildFocusCategoryCard(
+              category['name'] as String,
+              category['color'] as Color,
+              dayIndex,
             )
-          else
-            Padding(
-              padding: const EdgeInsets.only(left: 8, bottom: 8),
-              child: Column(
-                children: entries.map((entry) => _buildTimelineEntryItem(entry)).toList(),
-              ),
-            ),
-        ],
-        if (!isCurrent)
-          Divider(
-            color: Colors.white.withValues(alpha: 0.05),
-            height: 1,
-          ),
-      ],
-    );
-  }
-
-  Widget _buildTimeSlotGroup(String title, List<TimelineEntry> entries, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ...entries.map((entry) => _buildTimelineEntryItem(entry)),
-      ],
-    );
-  }
-
-  Widget _buildTimelineEntriesCard() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF2A2D3A),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF9F0A),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'My Timeline',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 20),
-                color: Colors.white.withValues(alpha: 0.6),
-                onPressed: _loadTodaysTimeline,
-                tooltip: 'Refresh Timeline',
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_isLoadingTimeline)
-            const Center(child: CircularProgressIndicator())
-          else if (_timelineEntries.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'No timeline entries for today. Add some in the Timeline screen.',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            )
-          else
-            ..._timelineEntries.map((entry) => _buildTimelineEntryItem(entry)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimelineEntryItem(TimelineEntry entry) {
-    final habit = _habitsMap[entry.habitId];
-    final isCompleted = entry.completionStatus == CompletionStatus.completed ||
-                        entry.completionStatus == CompletionStatus.onTime ||
-                        entry.completionStatus == CompletionStatus.delayed ||
-                        entry.completionStatus == CompletionStatus.partial ||
-                        entry.completionStatus == CompletionStatus.avoided ||
-                        entry.completionStatus == CompletionStatus.missed;
-    
-    return Container(
-      key: ValueKey('${entry.id}_${entry.habitId}_${entry.startMinutes}'),
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          // Time column
-          SizedBox(
-            width: 44,
-            child: Text(
-              entry.startTimeFormatted,
-              style: TextStyle(
-                fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.6),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Completion checkbox
-          GestureDetector(
-            onTap: () => _showTimelineEntryStateDialog(entry),
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: isCompleted ? _getCompletionStatusColor(entry.completionStatus) : Colors.transparent,
-                border: Border.all(
-                  color: isCompleted ? _getCompletionStatusColor(entry.completionStatus) : Colors.white.withValues(alpha: 0.3),
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(3),
-              ),
-              child: isCompleted 
-                ? Center(child: _getCompletionStatusIcon(entry.completionStatus))
-                : null,
-            ),
-          ),
-          const SizedBox(width: 14),
-          // Habit icon
-          if (habit?.icon.isNotEmpty == true)
-            Padding(
-              padding: const EdgeInsets.only(right: 6),
-              child: Text(habit!.icon, style: const TextStyle(fontSize: 14)),
-            ),
-          // Habit name
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _showTimelineEntryStateDialog(entry),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    habit?.title ?? 'Unknown',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isCompleted 
-                        ? Colors.white.withValues(alpha: 0.8)
-                        : Colors.white,
-                      decoration: isCompleted ? TextDecoration.lineThrough : null,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  Text(
-                    entry.durationFormatted,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.white.withValues(alpha: 0.4),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          // Points badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: _getCompletionStatusColor(entry.completionStatus).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              '${entry.points} pts',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: _getCompletionStatusColor(entry.completionStatus),
-              ),
-            ),
           ),
         ],
       ),
     );
-  }
-
-  void _showTimelineEntryStateDialog(TimelineEntry entry) {
-    final habit = _habitsMap[entry.habitId];
-    final availableStates = [
-      CompletionStatus.none,
-      CompletionStatus.completed,
-      CompletionStatus.partial,
-      CompletionStatus.missed,
-    ];
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('${habit?.title ?? 'Entry'} - ${entry.startTimeFormatted}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: availableStates.map((status) {
-              return ListTile(
-                leading: _getCompletionStatusIcon(status),
-                title: Text(_getCompletionStatusDisplayName(status)),
-                trailing: entry.completionStatus == status 
-                  ? const Icon(Icons.check, color: Colors.green)
-                  : null,
-                onTap: () {
-                  _updateTimelineEntryStatus(entry, status);
-                  Navigator.of(context).pop();
-                },
-              );
-            }).toList(),
-          ),
-        );
-      },
-    );
-  }
-
-  Color _getCompletionStatusColor(CompletionStatus status) {
-    switch (status) {
-      case CompletionStatus.none:
-        return Colors.grey;
-      case CompletionStatus.onTime:
-      case CompletionStatus.completed:
-      case CompletionStatus.avoided:
-        return Colors.green.shade600;
-      case CompletionStatus.delayed:
-      case CompletionStatus.partial:
-        return Colors.orange.shade400;
-      case CompletionStatus.missed:
-        return Colors.red.shade400;
-    }
-  }
-
-  Widget _getCompletionStatusIcon(CompletionStatus status) {
-    switch (status) {
-      case CompletionStatus.none:
-        return const SizedBox.shrink();
-      case CompletionStatus.onTime:
-        return const Icon(Icons.access_time, color: Colors.white, size: 12);
-      case CompletionStatus.completed:
-        return const Icon(Icons.check, color: Colors.white, size: 12);
-      case CompletionStatus.delayed:
-        return const Icon(Icons.schedule, color: Colors.white, size: 12);
-      case CompletionStatus.partial:
-        return const Icon(Icons.circle_outlined, color: Colors.white, size: 12);
-      case CompletionStatus.missed:
-        return const Icon(Icons.close, color: Colors.white, size: 12);
-      case CompletionStatus.avoided:
-        return const Icon(Icons.block, color: Colors.white, size: 12);
-    }
-  }
-
-  String _getCompletionStatusDisplayName(CompletionStatus status) {
-    switch (status) {
-      case CompletionStatus.none:
-        return 'Not tracked';
-      case CompletionStatus.onTime:
-        return 'On time';
-      case CompletionStatus.delayed:
-        return 'Delayed';
-      case CompletionStatus.partial:
-        return 'Partial';
-      case CompletionStatus.completed:
-        return 'Completed';
-      case CompletionStatus.missed:
-        return 'Missed';
-      case CompletionStatus.avoided:
-        return 'Avoided (Good!)';
-    }
   }
 
   Widget _buildFocusCategoryCard(String categoryName, Color categoryColor, int dayIndex) {
-    List<String> categoryHabitIds = _categories[categoryName] ?? [];
+    List<String> categoryHabits = _categories[categoryName] ?? [];
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
     // Filter habits for weekends
-    List<String> availableHabitIds = categoryHabitIds.where((habitId) {
-      return !_isHabitDisabledById(habitId, dayIndex);
+    List<String> availableHabits = categoryHabits.where((habit) {
+      return !_isHabitDisabled(habit, dayIndex);
     }).toList();
 
     return Container(
@@ -4340,7 +3139,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ],
           ),
           const SizedBox(height: 16),
-          if (availableHabitIds.isEmpty)
+          if (availableHabits.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
@@ -4353,15 +3152,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               ),
             )
           else
-            ...availableHabitIds.map((habitId) => _buildTaskItem(habitId, dayIndex)),
+            ...availableHabits.map((habit) => _buildTaskItem(habit, dayIndex)),
         ],
       ),
     );
   }
 
-  Widget _buildTaskItem(String habitId, int dayIndex) {
-    final habitTitle = _getHabitTitle(habitId);
-    HabitState currentState = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+  Widget _buildTaskItem(String habitName, int dayIndex) {
+    HabitState currentState = _trackingData[habitName]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
     bool isCompleted = currentState == HabitState.completed || 
                       currentState == HabitState.onTime || 
                       currentState == HabitState.delayed ||
@@ -4369,12 +3167,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                       currentState == HabitState.avoided;
     
     return Container(
-      key: ValueKey('task_${habitId}_$dayIndex'),
       margin: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
           GestureDetector(
-            onTap: () => _showHabitStateDialogById(habitId, dayIndex),
+            onTap: () => _showHabitStateDialog(habitName, dayIndex),
             child: Container(
               width: 20,
               height: 20,
@@ -4394,9 +3191,9 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           const SizedBox(width: 12),
           Expanded(
             child: GestureDetector(
-              onTap: () => _showHabitStateDialogById(habitId, dayIndex),
+              onTap: () => _showHabitStateDialog(habitName, dayIndex),
               child: Text(
-                habitTitle,
+                habitName,
                 style: TextStyle(
                   fontSize: 16,
                   color: isCompleted 
@@ -4416,7 +3213,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                '+${_getHabitPoints(habitTitle, currentState, dayIndex)}',
+                '+${_getHabitPoints(habitName, currentState, dayIndex)}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -4429,148 +3226,25 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  Widget _buildYourProgressSection({required int dayIndex, required int currentScore}) {
+  Widget _buildYourProgressSection(int dayIndex, int currentScore) {
     return Container(
       padding: const EdgeInsets.only(bottom: 24), // Add bottom padding for better scrolling
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const ContestsDashboardWidget(),
-          const SizedBox(height: 24),
-          _buildDailyPointsCard(dayIndex),
-          const SizedBox(height: 24),
-          _buildCompoundHabitsProgressCard(dayIndex),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDailyPointsCard(int dayIndex) {
-    int earnedPoints = 0;
-    int maxPoints = 0;
-    
-    for (final entry in _timelineEntries) {
-      maxPoints += entry.points;
-      if (entry.completionStatus == CompletionStatus.completed ||
-          entry.completionStatus == CompletionStatus.onTime) {
-        earnedPoints += entry.points;
-      } else if (entry.completionStatus == CompletionStatus.delayed ||
-                 entry.completionStatus == CompletionStatus.partial) {
-        earnedPoints += (entry.points * 0.5).round();
-      }
-    }
-    
-    double percentage = maxPoints > 0 ? earnedPoints / maxPoints : 0.0;
-    
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: _getScoreColor(percentage),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'DAILY POINTS',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.9),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _getScoreColor(percentage).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: _getScoreColor(percentage).withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.stars_rounded,
-                      color: _getScoreColor(percentage),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$earnedPoints',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: _getScoreColor(percentage),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Text(
+            'YOUR PROGRESS',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.5,
+            ),
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$earnedPoints of $maxPoints points',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                '${(percentage * 100).toInt()}%',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: _getScoreColor(percentage),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            height: 8,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              color: Colors.white.withValues(alpha: 0.1),
-            ),
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: percentage.clamp(0.0, 1.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: LinearGradient(
-                    colors: [
-                      _getScoreColor(percentage),
-                      _getScoreColor(percentage).withValues(alpha: 0.7),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          _buildCompoundHabitsProgressCard(dayIndex),
+          const SizedBox(height: 24),
+          _buildCategoryProgressSection(dayIndex),
         ],
       ),
     );
@@ -4580,19 +3254,17 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return ValueListenableBuilder<double>(
       valueListenable: _compoundProgressNotifier,
       builder: (context, progress, child) {
+        List<String> compoundHabits = _compoundingHabits.toList();
         int completedCount = 0;
         int totalCount = 0;
         
-        for (final entry in _timelineEntries) {
-          if (!entry.isCompound) {
-            continue;
-          }
-          if (_isHabitDisabledById(entry.habitId, dayIndex)) {
-            continue;
-          }
-          totalCount++;
-          if (_isCompletedStatus(entry.completionStatus)) {
-            completedCount++;
+        for (String habit in compoundHabits) {
+          if (!_isHabitDisabled(habit, dayIndex)) {
+            totalCount++;
+            HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+              completedCount++;
+            }
           }
         }
         
@@ -4601,8 +3273,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
+        color: const Color(0xFF2A2D3A),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4715,16 +3391,14 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   String _getCompoundHabitsNames(int dayIndex, int completedCount) {
     List<String> completedHabits = [];
+    List<String> compoundHabits = _compoundingHabits.toList();
     
-    for (final entry in _timelineEntries) {
-      if (!entry.isCompound) {
-        continue;
-      }
-      if (_isHabitDisabledById(entry.habitId, dayIndex)) {
-        continue;
-      }
-      if (_isCompletedStatus(entry.completionStatus)) {
-        completedHabits.add(_getHabitTitle(entry.habitId));
+    for (String habit in compoundHabits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+          completedHabits.add(habit);
+        }
       }
     }
     
@@ -4829,12 +3503,26 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         return Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A2E),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF2A2D3A),
+                const Color(0xFF1E212E).withValues(alpha: 0.8),
+              ],
+            ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: borderColor,
               width: borderWidth,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -5040,128 +3728,254 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  TimelineEntry? _getCurrentTimelineEntry(int currentMinutes) {
-    if (_timelineEntries.isEmpty) return null;
-    
-    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
-    
-    for (int i = sortedEntries.length - 1; i >= 0; i--) {
-      final entry = sortedEntries[i];
-      if (currentMinutes >= entry.startMinutes && 
-          currentMinutes < entry.startMinutes + entry.durationMinutes) {
-        return entry;
-      }
-    }
-    return null;
-  }
-
   int _getNextTransitionTime(int currentMinutes) {
-    if (_timelineEntries.isEmpty) {
-      return currentMinutes + 60;
-    }
+    // Define all transition times in minutes from midnight
+    final transitions = [
+      120,  // 2:00 AM (end book reading, start sleep)
+      540,  // 9:00 AM (end sleep, start cold shower)
+      570,  // 9:30 AM (end cold shower, start morning quran)
+      585,  // 9:45 AM (end morning quran, start breakfast time)
+      630,  // 10:30 AM (end breakfast time, start deep focus 1)
+      720,  // 12:00 PM (end deep focus 1, start guitar practice)
+      740,  // 12:20 PM (end guitar practice, start deep focus 2)
+      810,  // 1:30 PM (end deep focus 2, start zuhar nimaz)
+      825,  // 1:45 PM (end zuhar nimaz, start lunch time)
+      870,  // 2:30 PM (end lunch time, start deep focus 3)
+      960,  // 4:00 PM (end deep focus 3, start reset minute)
+      975,  // 4:15 PM (end reset minute, start deep focus 4)
+      1050, // 5:30 PM (end deep focus 4, start asr nimaz)
+      1080, // 6:00 PM (end asr nimaz, start chill time)
+      1200, // 8:00 PM (end chill time, start hit the gym)
+      1260, // 9:00 PM (end hit the gym, start dinner)
+      1380, // 11:00 PM (end dinner, start book reading)
+    ];
     
-    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
-    
-    for (final entry in sortedEntries) {
-      final endMinutes = entry.startMinutes + entry.durationMinutes;
-      if (currentMinutes < endMinutes) {
-        return endMinutes;
+    // Find the next transition after current time
+    for (int transition in transitions) {
+      if (currentMinutes < transition) {
+        return transition;
       }
     }
     
-    if (sortedEntries.isNotEmpty) {
-      return sortedEntries.first.startMinutes + 1440;
-    }
-    
-    return currentMinutes + 60;
+    // If no transition found today, return first transition tomorrow (2:00 AM next day)
+    return 120 + 1440; // 2:00 AM next day
   }
 
   int _getCurrentActivityStartTime(int currentMinutes) {
-    if (_timelineEntries.isEmpty) {
-      return currentMinutes;
-    }
+    // Define all transition times in minutes from midnight
+    final transitions = [
+      120,  // 2:00 AM (end book reading, start sleep)
+      540,  // 9:00 AM (end sleep, start cold shower)
+      570,  // 9:30 AM (end cold shower, start morning quran)
+      585,  // 9:45 AM (end morning quran, start breakfast time)
+      630,  // 10:30 AM (end breakfast time, start deep focus 1)
+      720,  // 12:00 PM (end deep focus 1, start guitar practice)
+      740,  // 12:20 PM (end guitar practice, start deep focus 2)
+      810,  // 1:30 PM (end deep focus 2, start zuhar nimaz)
+      825,  // 1:45 PM (end zuhar nimaz, start lunch time)
+      870,  // 2:30 PM (end lunch time, start deep focus 3)
+      960,  // 4:00 PM (end deep focus 3, start reset minute)
+      975,  // 4:15 PM (end reset minute, start deep focus 4)
+      1050, // 5:30 PM (end deep focus 4, start asr nimaz)
+      1080, // 6:00 PM (end asr nimaz, start chill time)
+      1200, // 8:00 PM (end chill time, start hit the gym)
+      1260, // 9:00 PM (end hit the gym, start dinner)
+      1380, // 11:00 PM (end dinner, start book reading)
+    ];
     
-    final sortedEntries = List<TimelineEntry>.from(_timelineEntries)
-      ..sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+    // Find the last transition before or at current time
+    int activityStart = 120; // Default to 2:00 AM (start of sleep)
     
-    for (int i = sortedEntries.length - 1; i >= 0; i--) {
-      final entry = sortedEntries[i];
-      if (currentMinutes >= entry.startMinutes) {
-        return entry.startMinutes;
+    for (int i = 0; i < transitions.length; i++) {
+      if (currentMinutes >= transitions[i]) {
+        activityStart = transitions[i];
+      } else {
+        break;
       }
     }
     
-    if (sortedEntries.isNotEmpty) {
-      return sortedEntries.last.startMinutes;
+    // Handle the case where we're before the first transition (in sleep period)
+    if (currentMinutes < 120) {
+      activityStart = 1380; // 11:00 PM previous day (start of book reading)
     }
     
-    return currentMinutes;
-  }
-
-  IconData _getIconForHabitName(String habitName) {
-    final lowerName = habitName.toLowerCase();
-    
-    if (lowerName.contains('shower') || lowerName.contains('bath')) {
-      return Icons.water_drop;
-    } else if (lowerName.contains('quran') || lowerName.contains('reading') || lowerName.contains('book')) {
-      return Icons.auto_stories;
-    } else if (lowerName.contains('prayer') || lowerName.contains('nimaz') || lowerName.contains('fajr') || 
-               lowerName.contains('zuhar') || lowerName.contains('asr') || lowerName.contains('maghrib') || 
-               lowerName.contains('isha') || lowerName.contains('duhr')) {
-      return Icons.mosque;
-    } else if (lowerName.contains('gym') || lowerName.contains('workout') || lowerName.contains('exercise')) {
-      return Icons.fitness_center;
-    } else if (lowerName.contains('breakfast')) {
-      return Icons.breakfast_dining;
-    } else if (lowerName.contains('lunch')) {
-      return Icons.lunch_dining;
-    } else if (lowerName.contains('dinner')) {
-      return Icons.dinner_dining;
-    } else if (lowerName.contains('focus') || lowerName.contains('work') || lowerName.contains('code') || lowerName.contains('study')) {
-      return Icons.code;
-    } else if (lowerName.contains('guitar') || lowerName.contains('music')) {
-      return Icons.music_note;
-    } else if (lowerName.contains('typing') || lowerName.contains('keyboard')) {
-      return Icons.keyboard;
-    } else if (lowerName.contains('walk') || lowerName.contains('walking')) {
-      return Icons.directions_walk;
-    } else if (lowerName.contains('water') || lowerName.contains('drink')) {
-      return Icons.local_drink;
-    } else if (lowerName.contains('sleep') || lowerName.contains('bed')) {
-      return Icons.bedtime;
-    } else if (lowerName.contains('chill') || lowerName.contains('relax') || lowerName.contains('rest')) {
-      return Icons.self_improvement;
-    } else if (lowerName.contains('reset') || lowerName.contains('break')) {
-      return Icons.refresh;
-    } else {
-      return Icons.access_time;
-    }
+    return activityStart;
   }
 
   IconData _getHabitIcon(int dayIndex) {
     final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final totalMinutes = currentHour * 60 + currentMinute;
     
-    final currentEntry = _getCurrentTimelineEntry(currentMinutes);
-    if (currentEntry != null) {
-      return _getIconForHabitName(currentEntry.habitName);
+    // Enhanced schedule with better icons matching the detailed timeline
+    
+    // 9:00 - 9:40 AM: Cold shower
+    if (totalMinutes >= 540 && totalMinutes < 580) {
+      return Icons.water_drop; // More visually appealing than Icons.shower
     }
-    
-    return Icons.access_time;
+    // 9:40 - 10:00 AM: Fajr Nimaz
+    else if (totalMinutes >= 580 && totalMinutes < 600) {
+      return Icons.mosque; // Prayer/mosque icon
+    }
+    // 10:00 - 10:30 AM: Quran
+    else if (totalMinutes >= 600 && totalMinutes < 630) {
+      return Icons.menu_book; // Book icon for Quran
+    }
+    // 10:30 - 11:30 AM: Gym
+    else if (totalMinutes >= 630 && totalMinutes < 690) {
+      return Icons.fitness_center; // Gym/fitness icon
+    }
+    // 11:30 AM - 12:00 PM: Breakfast
+    else if (totalMinutes >= 690 && totalMinutes < 720) {
+      return Icons.breakfast_dining; // Breakfast icon
+    }
+    // 12:00 - 12:30 PM: Duhr
+    else if (totalMinutes >= 720 && totalMinutes < 750) {
+      return Icons.wb_sunny; // Sun icon for midday prayer
+    }
+    // 12:30 - 2:00 PM: Book Reading
+    else if (totalMinutes >= 750 && totalMinutes < 840) {
+      return Icons.auto_stories; // Book/stories icon
+    }
+    // 2:00 - 3:00 PM: Lunch
+    else if (totalMinutes >= 840 && totalMinutes < 900) {
+      return Icons.lunch_dining; // Lunch icon
+    }
+    // 3:00 - 3:30 PM: Asr
+    else if (totalMinutes >= 900 && totalMinutes < 930) {
+      return Icons.wb_twilight; // Afternoon prayer icon
+    }
+    // 3:30 - 5:30 PM: Data Structures
+    else if (totalMinutes >= 930 && totalMinutes < 1050) {
+      return Icons.code; // Code/programming icon
+    }
+    // 5:30 - 6:30 PM: Typing
+    else if (totalMinutes >= 1050 && totalMinutes < 1110) {
+      return Icons.keyboard; // Keyboard icon
+    }
+    // 6:30 - 7:00 PM: Maghrib
+    else if (totalMinutes >= 1110 && totalMinutes < 1140) {
+      return Icons.nights_stay; // Evening prayer icon
+    }
+    // 7:00 - 8:00 PM: Guitar
+    else if (totalMinutes >= 1140 && totalMinutes < 1200) {
+      return Icons.music_note; // Music/guitar icon
+    }
+    // 8:00 - 8:30 PM: Dinner
+    else if (totalMinutes >= 1200 && totalMinutes < 1230) {
+      return Icons.dinner_dining; // Dinner icon
+    }
+    // 8:30 - 9:00 PM: Isha
+    else if (totalMinutes >= 1230 && totalMinutes < 1260) {
+      return Icons.star; // Star icon for night prayer
+    }
+    // 9:00 - 9:30 PM: Walk
+    else if (totalMinutes >= 1260 && totalMinutes < 1290) {
+      return Icons.directions_walk; // Walking icon
+    }
+    // 9:30 - 10:00 PM: Evening Quran
+    else if (totalMinutes >= 1290 && totalMinutes < 1320) {
+      return Icons.book; // Book icon for evening Quran
+    }
+    // 10:00 - 11:00 PM: Water
+    else if (totalMinutes >= 1320 && totalMinutes < 1380) {
+      return Icons.local_drink; // Drink/water icon
+    }
+    // 11:00 PM - 1:00 AM: Book Reading
+    else if (totalMinutes >= 1380 || totalMinutes < 60) {
+      return Icons.library_books; // Library books icon
+    }
+    // 1:00 - 2:00 AM: Bed time
+    else if (totalMinutes >= 60 && totalMinutes < 120) {
+      return Icons.bed; // Bed icon
+    }
+    // 2:00 - 9:00 AM: Sleep time
+    else if (totalMinutes >= 120 && totalMinutes < 540) {
+      return Icons.bedtime; // Sleep icon
+    }
+    else {
+      return Icons.access_time; // Default clock icon
+    }
   }
 
   String _getCurrentHabitInAction(int dayIndex) {
     final now = DateTime.now();
-    final currentMinutes = now.hour * 60 + now.minute;
+    final currentHour = now.hour;
+    final currentMinute = now.minute;
+    final totalMinutes = currentHour * 60 + currentMinute;
     
-    final currentEntry = _getCurrentTimelineEntry(currentMinutes);
-    if (currentEntry != null) {
-      return currentEntry.habitName;
+    // 9:00 – 9:30 AM — Cold Shower (540-570 minutes)
+    if (totalMinutes >= 540 && totalMinutes < 570) {
+      return "Cold Shower";
     }
-    
-    return "No scheduled activity";
+    // 9:30 – 9:45 AM — Morning Quran (570-585 minutes)
+    else if (totalMinutes >= 570 && totalMinutes < 585) {
+      return "Morning Quran";
+    }
+    // 9:45 – 10:30 AM — Breakfast Time (585-630 minutes)
+    else if (totalMinutes >= 585 && totalMinutes < 630) {
+      return "Breakfast Time";
+    }
+    // 10:30 – 12:00 PM — Deep Focus 1 (630-720 minutes)
+    else if (totalMinutes >= 630 && totalMinutes < 720) {
+      return "Deep Focus 1";
+    }
+    // 12:00 – 12:20 PM — Guitar Practice (720-740 minutes)
+    else if (totalMinutes >= 720 && totalMinutes < 740) {
+      return "Guitar Practice";
+    }
+    // 12:20 – 1:30 PM — Deep Focus 2 (740-810 minutes)
+    else if (totalMinutes >= 740 && totalMinutes < 810) {
+      return "Deep Focus 2";
+    }
+    // 1:30 – 1:45 PM — Zuhar Nimaz (810-825 minutes)
+    else if (totalMinutes >= 810 && totalMinutes < 825) {
+      return "Zuhar Nimaz";
+    }
+    // 1:45 – 2:30 PM — Lunch Time (825-870 minutes)
+    else if (totalMinutes >= 825 && totalMinutes < 870) {
+      return "Lunch Time";
+    }
+    // 2:30 – 4:00 PM — Deep Focus 3 (870-960 minutes)
+    else if (totalMinutes >= 870 && totalMinutes < 960) {
+      return "Deep Focus 3";
+    }
+    // 4:00 – 4:15 PM — Reset Minute (960-975 minutes)
+    else if (totalMinutes >= 960 && totalMinutes < 975) {
+      return "Reset Minute";
+    }
+    // 4:15 – 5:30 PM — Deep Focus 4 (975-1050 minutes)
+    else if (totalMinutes >= 975 && totalMinutes < 1050) {
+      return "Deep Focus 4";
+    }
+    // 5:30 – 6:00 PM — Asr Nimaz (1050-1080 minutes)
+    else if (totalMinutes >= 1050 && totalMinutes < 1080) {
+      return "Asr Nimaz";
+    }
+    // 6:00 – 8:00 PM — Chill Time (1080-1200 minutes)
+    else if (totalMinutes >= 1080 && totalMinutes < 1200) {
+      return "Chill Time";
+    }
+    // 8:00 – 9:00 PM — Hit the Gym (1200-1260 minutes)
+    else if (totalMinutes >= 1200 && totalMinutes < 1260) {
+      return "Hit the Gym";
+    }
+    // 9:00 – 11:00 PM — Dinner (1260-1380 minutes)
+    else if (totalMinutes >= 1260 && totalMinutes < 1380) {
+      return "Dinner";
+    }
+    // 11:00 PM – 2:00 AM — Book Reading (1380+ or 0-120 minutes)
+    else if (totalMinutes >= 1380 || totalMinutes < 120) {
+      return "Book Reading";
+    }
+    // 2:00 - 9:00 AM: Sleep (120-540 minutes)
+    else if (totalMinutes >= 120 && totalMinutes < 540) {
+      return "Sleep";
+    }
+    else {
+      return "Transition period";
+    }
   }
 
   String _getHabitMotivation() {
@@ -5178,32 +3992,23 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   Widget _buildCategoryProgressSection(int dayIndex) {
-    // Build progress categories dynamically with progress values for sorting
-    final progressCategories = _categoryList.map((name) => {
-      'name': name,
-      'color': _getCategoryColor(name),
-      'progress': _getCategoryProgress(name, dayIndex),
-    }).toList();
-    
-    // Filter out categories with no progress
-    final categoriesWithProgress = progressCategories
-        .where((category) => (category['progress'] as double) > 0)
-        .toList();
-    
-    // Don't show the widget if no categories have progress
-    if (categoriesWithProgress.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    
-    // Sort by progress descending (items with progress appear at top)
-    categoriesWithProgress.sort((a, b) => 
-      (b['progress'] as double).compareTo(a['progress'] as double));
+    final progressCategories = [
+      {'name': 'Akhirat', 'color': const Color(0xFFFF453A)},
+      {'name': 'Personal', 'color': const Color(0xFF30D158)},
+      {'name': 'Professional', 'color': const Color(0xFF007AFF)},
+      {'name': 'Health', 'color': const Color(0xFF00C7BE)},
+      {'name': 'Sleep Tracking', 'color': const Color(0xFF5856D6)},
+    ];
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
+        color: const Color(0xFF2A2D3A),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -5218,7 +4023,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             ),
           ),
           const SizedBox(height: 16),
-          ...categoriesWithProgress.map((category) => 
+          ...progressCategories.map((category) => 
             _buildCategoryProgressItem(
               category['name'] as String,
               category['color'] as Color,
@@ -5270,14 +4075,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               borderRadius: BorderRadius.circular(3),
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) => AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeOutCubic,
-                width: constraints.maxWidth * progress,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(3),
-                  color: categoryColor,
+            child: AnimatedBuilder(
+              animation: _categoryProgressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: progress * _categoryProgressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                    color: categoryColor,
+                  ),
                 ),
               ),
             ),
@@ -5290,12 +4096,12 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryCompletedCount(String categoryName, int dayIndex) {
-    List<String> habitIds = _categories[categoryName] ?? [];
+    List<String> habits = _categories[categoryName] ?? [];
     int completed = 0;
     
-    for (String habitId in habitIds) {
-      if (!_isHabitDisabledById(habitId, dayIndex)) {
-        HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    for (String habit in habits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
           completed++;
         }
@@ -5305,11 +4111,11 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryTotalCount(String categoryName, int dayIndex) {
-    List<String> habitIds = _categories[categoryName] ?? [];
+    List<String> habits = _categories[categoryName] ?? [];
     int total = 0;
     
-    for (String habitId in habitIds) {
-      if (!_isHabitDisabledById(habitId, dayIndex)) {
+    for (String habit in habits) {
+      if (!_isHabitDisabled(habit, dayIndex)) {
         total++;
       }
     }
@@ -5412,18 +4218,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
     );
   }
 
-  Widget _buildDailyHabitItem(String habitId, int dayIndex) {
-    final habitTitle = _getHabitTitle(habitId);
-    bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
-    bool isSleepTracking = _sleepTrackingHabits.contains(habitTitle);
+  Widget _buildDailyHabitItem(String habit, int dayIndex) {
+    bool isDisabled = _isHabitDisabled(habit, dayIndex);
+    bool isSleepTracking = _sleepTrackingHabits.contains(habit);
     
-    HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
-    int points = _habitStatePoints[habitTitle]?[state] ?? 0;
-    int maxPoints = _getMaxHabitPoints(habitTitle);
-    TimeOfDay? time = _timeData[habitId]?[_currentWeekKey]?[dayIndex];
+    HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+    int points = _habitStatePoints[habit]?[state] ?? 0;
+    int maxPoints = _getMaxHabitPoints(habit);
+    TimeOfDay? time = _timeData[habit]?[_currentWeekKey]?[dayIndex];
     
     return Container(
-      key: ValueKey('${habitId}_$dayIndex'),
       decoration: BoxDecoration(
         border: Border(
           top: BorderSide(color: Colors.grey.shade800, width: 0.5),
@@ -5432,7 +4236,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: GestureDetector(
-          onTap: isDisabled ? null : () => _showHabitStateDialogById(habitId, dayIndex),
+          onTap: isDisabled ? null : () => _showHabitStateDialog(habit, dayIndex),
           child: Container(
             width: 24,
             height: 24,
@@ -5449,7 +4253,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              habitTitle,
+              habit,
               style: TextStyle(
                 color: isDisabled ? Colors.grey.shade600 : Colors.white,
                 fontWeight: FontWeight.w500,
@@ -5501,7 +4305,6 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
         const SizedBox(height: 24),
         ..._categories.entries.map((entry) {
           return Column(
-            key: ValueKey(entry.key),
             children: [
               _buildWeekCategorySection(entry.key, entry.value),
               const SizedBox(height: 16),
@@ -6073,12 +4876,13 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
 
   // Individual Category Rings Widget
   Widget _buildIndividualCategoryRings(int dayIndex) {
-    // Build categories dynamically
-    final categories = _categoryList.map((name) => {
-      'name': name,
-      'color': _getCategoryColor(name),
-      'title': name,
-    }).toList();
+    final categories = [
+      {'name': 'Akhirat', 'color': const Color(0xFFFF453A), 'title': 'Akhirat'},
+      {'name': 'Personal', 'color': const Color(0xFF30D158), 'title': 'Personal'},
+      {'name': 'Professional', 'color': const Color(0xFFFF9F0A), 'title': 'Professional'},
+      {'name': 'Health', 'color': const Color(0xFF00C7BE), 'title': 'Health'},
+      {'name': 'Sleep', 'color': const Color(0xFF007AFF), 'title': 'Sleep'},
+    ];
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -6216,19 +5020,18 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryScore(String categoryName, int dayIndex) {
-    List<String> habitIds = _categories[categoryName] ?? [];
+    List<String> habits = _categories[categoryName] ?? [];
     
     int currentScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
-    for (String habitId in habitIds) {
-      bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
+    for (String habit in habits) {
+      bool isDisabled = _isHabitDisabled(habit, dayIndex);
       
       if (!isDisabled) {
-        final habitTitle = _getHabitTitle(habitId);
-        HabitState state = _trackingData[habitId]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+        HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
         if (state != HabitState.none) {
-          currentScore += _habitStatePoints[habitTitle]?[state] ?? 0;
+          currentScore += _habitStatePoints[habit]?[state] ?? 0;
         }
       }
     }
@@ -6236,17 +5039,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
 
   int _getCategoryMaxScore(String categoryName, int dayIndex) {
-    List<String> habitIds = _categories[categoryName] ?? [];
+    List<String> habits = _categories[categoryName] ?? [];
     
     int maxScore = 0;
     bool isWeekend = dayIndex == 5 || dayIndex == 6;
     
-    for (String habitId in habitIds) {
-      bool isDisabled = _isHabitDisabledById(habitId, dayIndex);
+    for (String habit in habits) {
+      bool isDisabled = _isHabitDisabled(habit, dayIndex);
       
       if (!isDisabled) {
-        final habitTitle = _getHabitTitle(habitId);
-        maxScore += _getMaxHabitPoints(habitTitle);
+        maxScore += _getMaxHabitPoints(habit);
       }
     }
     return maxScore;
@@ -6296,21 +5098,42 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Build rings dynamically for all categories
-                ...List.generate(_categoryList.length.clamp(0, 4), (i) {
-                  final radii = [85.0, 65.0, 45.0, 25.0];
-                  final categoryName = _categoryList[i];
-                  final color = _getCategoryColor(categoryName);
-                  return AnimatedBuilder(
-                    animation: _ringAnimation,
-                    builder: (context, child) => _buildActivityRing(
-                      radius: radii[i],
-                      strokeWidth: 12,
-                      progress: _getCategoryProgress(categoryName, dayIndex) * _ringAnimation.value,
-                      color: color,
-                    ),
-                  );
-                }),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 85,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Akhirat', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFFFF453A), // Red ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 65,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Personal', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF30D158), // Green ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 45,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Health', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF00C7BE), // Cyan ring
+                  ),
+                ),
+                AnimatedBuilder(
+                  animation: _ringAnimation,
+                  builder: (context, child) => _buildActivityRing(
+                    radius: 25,
+                    strokeWidth: 12,
+                    progress: _getCategoryProgress('Sleep Tracking', dayIndex) * _ringAnimation.value,
+                    color: const Color(0xFF5856D6), // Purple ring
+                  ),
+                ),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -6421,25 +5244,57 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   Widget _buildRingLegend() {
     return Column(
       children: [
-        ...List.generate(_categoryList.length.clamp(0, 4), (i) {
-          final categoryName = _categoryList[i];
-          final color = _getCategoryColor(categoryName);
-          return AnimatedBuilder(
-            animation: _ringAnimation,
-            builder: (context, child) {
-              DateTime now = DateTime.now();
-              int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1;
-              return Padding(
-                padding: EdgeInsets.only(bottom: i < _categoryList.length.clamp(0, 4) - 1 ? 8 : 0),
-                child: _buildLegendItem(
-                  color: color,
-                  title: categoryName,
-                  subtitle: '${(_getCategoryProgress(categoryName, currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
-                ),
-              );
-            },
-          );
-        }),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
+            return _buildLegendItem(
+              color: const Color(0xFFFF453A),
+              title: 'Akhirat',
+              subtitle: '${(_getCategoryProgress('Barzak (Qabt-Qafn-Darkness)', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
+            return _buildLegendItem(
+              color: const Color(0xFF30D158),
+              title: 'Personal',
+              subtitle: '${(_getCategoryProgress('Personal', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
+            return _buildLegendItem(
+              color: const Color(0xFF00C7BE),
+              title: 'Health',
+              subtitle: '${(_getCategoryProgress('Health', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+        AnimatedBuilder(
+          animation: _ringAnimation,
+          builder: (context, child) {
+            DateTime now = DateTime.now();
+            int currentDayIndex = now.weekday == 7 ? 6 : now.weekday - 1; // Convert to 0-6 system
+            return _buildLegendItem(
+              color: const Color(0xFF5856D6),
+              title: 'Sleep Tracking',
+              subtitle: '${(_getCategoryProgress('Sleep Tracking', currentDayIndex) * _ringAnimation.value * 100).toInt()}% complete',
+            );
+          },
+        ),
       ],
     );
   }
@@ -6564,15 +5419,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               borderRadius: BorderRadius.circular(4),
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) => AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeOutCubic,
-                width: constraints.maxWidth * percentage,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF30D158), Color(0xFF32D74B)],
+            child: AnimatedBuilder(
+              animation: _progressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: percentage * _progressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF30D158), Color(0xFF32D74B)],
+                    ),
                   ),
                 ),
               ),
@@ -6767,37 +5623,44 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
   }
   // Compounding Habits Chart Widget
   Widget _buildCompoundingHabitsChart(int dayIndex) {
+    List<String> compoundingHabitsList = _compoundingHabits.toList();
     int completedCount = 0;
     int totalCount = 0;
     
-    Map<String, int> categoryTotals = {};
-    Map<String, int> categoryCompleted = {};
-    
-    for (final entry in _timelineEntries) {
-      if (!entry.isCompound) {
-        continue;
-      }
-      if (_isHabitDisabledById(entry.habitId, dayIndex)) {
-        continue;
-      }
-      totalCount++;
-      if (_isCompletedStatus(entry.completionStatus)) {
-        completedCount++;
-      }
-      final category = _habitsMap[entry.habitId]?.category;
-      if (category != null && category.isNotEmpty) {
-        categoryTotals[category] = (categoryTotals[category] ?? 0) + 1;
-        if (_isCompletedStatus(entry.completionStatus)) {
-          categoryCompleted[category] = (categoryCompleted[category] ?? 0) + 1;
-        }
-      }
-    }
-    
     Map<String, double> categoryProgress = {};
-    for (final entry in categoryTotals.entries) {
-      final total = entry.value;
-      final completed = categoryCompleted[entry.key] ?? 0;
-      categoryProgress[entry.key] = total > 0 ? completed / total : 0.0;
+    Map<String, Color> categoryColors = {
+      'Akhirat': const Color(0xFFFF453A),
+      'Personal': const Color(0xFF30D158),
+      'Professional': const Color(0xFFFF9F0A),
+      'Health': const Color(0xFF00C7BE),
+    };
+    
+    // Calculate progress for each category
+    for (String category in ['Akhirat', 'Personal', 'Professional', 'Health']) {
+      List<String> categoryHabits = _categories[category] ?? [];
+      List<String> compoundingInCategory = categoryHabits.where((habit) => _compoundingHabits.contains(habit)).toList();
+      
+      if (compoundingInCategory.isNotEmpty) {
+        int categoryCompleted = 0;
+        int categoryTotal = compoundingInCategory.length;
+        
+        bool isWeekend = dayIndex == 5 || dayIndex == 6;
+        
+        for (String habit in compoundingInCategory) {
+          bool isDisabled = _isHabitDisabled(habit, dayIndex);
+          
+          if (!isDisabled) {
+            totalCount++;
+            HabitState state = _trackingData[habit]?[_currentWeekKey]?[dayIndex] ?? HabitState.none;
+            if (state == HabitState.completed || state == HabitState.onTime || state == HabitState.delayed || state == HabitState.partial) {
+              completedCount++;
+              categoryCompleted++;
+            }
+          }
+        }
+        
+        categoryProgress[category] = categoryTotal > 0 ? categoryCompleted / categoryTotal : 0.0;
+      }
     }
     
     double overallProgress = totalCount > 0 ? completedCount / totalCount : 0.0;
@@ -6878,15 +5741,16 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
               borderRadius: BorderRadius.circular(4),
               color: Colors.white.withValues(alpha: 0.1),
             ),
-            child: LayoutBuilder(
-              builder: (context, constraints) => AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeOutCubic,
-                width: constraints.maxWidth * overallProgress,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF9F0A), Color(0xFFFF453A)],
+            child: AnimatedBuilder(
+              animation: _progressAnimation,
+              builder: (context, child) => FractionallySizedBox(
+                widthFactor: overallProgress * _progressAnimation.value,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFF9F0A), Color(0xFFFF453A)],
+                    ),
                   ),
                 ),
               ),
@@ -6908,7 +5772,7 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
           ...categoryProgress.entries.map((entry) {
             String category = entry.key;
             double progress = entry.value;
-            Color color = _getCategoryColor(category);
+            Color color = categoryColors[category] ?? Colors.grey;
             
             return Container(
               margin: const EdgeInsets.only(bottom: 12),
@@ -6942,14 +5806,15 @@ class _DailyTrackerHomeState extends State<DailyTrackerHome> with TickerProvider
                         borderRadius: BorderRadius.circular(3),
                         color: Colors.white.withValues(alpha: 0.1),
                       ),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) => AnimatedContainer(
-                          duration: const Duration(milliseconds: 400),
-                          curve: Curves.easeOutCubic,
-                          width: constraints.maxWidth * progress,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(3),
-                            color: color,
+                      child: AnimatedBuilder(
+                        animation: _progressAnimation,
+                        builder: (context, child) => FractionallySizedBox(
+                          widthFactor: progress * _progressAnimation.value,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(3),
+                              color: color,
+                            ),
                           ),
                         ),
                       ),

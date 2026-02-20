@@ -45,32 +45,5 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>alexa-callback</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>rythmn</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>google</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.146630121520-he3rvsbj6sh4om7b60c73i8pajs72pre</string>
-			</array>
-		</dict>
-	</array>
-	<key>GIDClientID</key>
-	<string>146630121520-he3rvsbj6sh4om7b60c73i8pajs72pre.apps.googleusercontent.com</string>
-	<key>FlutterDeepLinkingEnabled</key>
-	<true/>
 </dict>
 </plist>

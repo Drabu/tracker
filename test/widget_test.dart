@@ -14,7 +14,7 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const DailyTrackerApp());
 
-    // Verify that the app starts (login screen when not authenticated)
-    expect(find.text('Sign in with Google'), findsOneWidget);
+    // Verify that the app title appears
+    expect(find.text('Today'), findsOneWidget);
   });
 }
